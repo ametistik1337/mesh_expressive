@@ -7,9 +7,9 @@
 [![Android](https://img.shields.io/badge/Platform-Android_8.0+-3DDC84.svg?style=flat)](https://www.android.com/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF.svg?style=flat)](https://kotlinlang.org/)
 [![Compose](https://img.shields.io/badge/Jetpack_Compose-Material3_Expressive-4285F4.svg?style=flat)](https://developer.android.com/jetpack/compose)
-[![Zero Trackers](https://img.shields.io/badge/Trackers-0_(Pure)-00C853.svg?style=flat)](https://github.com/AmetistYT)
-[![Vibecoded](https://img.shields.io/badge/Style-semi_vibecoded_by_gemini-purple.svg)](https://github.com/AmetistYT)
-[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)](https://github.com/AmetistYT/mesh_expressive/releases/tag/v2.1.0)
+[![Zero Trackers](https://img.shields.io/badge/Trackers-0_(Pure)-00C853.svg?style=flat)](https://github.com/ametistik1337)
+[![Vibecoded](https://img.shields.io/badge/Style-semi_vibecoded_by_gemini-purple.svg)](https://github.com/ametistik1337)
+[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)](https://github.com/ametistik1337/mesh_expressive/releases/tag/v2.1.0)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
@@ -122,7 +122,7 @@
 ### Команды для сборки:
 ```bash
 # Клонирование репозитория
-git clone https://github.com/AmetistYT/mesh_expressive.git
+git clone https://github.com/ametistik1337/mesh_expressive.git
 cd mesh_expressive
 
 # Сборка Debug APK
