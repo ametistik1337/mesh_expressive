@@ -51,9 +51,37 @@ data class LessonScheduleItem(
     val markCreatedAt: String? = null,
     val homework: String? = null,
     val topic: String? = null,
+    val isPointCorrected: Boolean = false,
+    val hasCorrection: Boolean = false,
     val testMaterials: List<LessonMaterialItem> = emptyList(),
     val fileMaterials: List<LessonMaterialItem> = emptyList()
-)
+) {
+    val isPointExpired: Boolean
+        get() {
+            val hasPoint = isPoint || !pointDate.isNullOrBlank() || rawMark?.endsWith(".") == true || rawMark == "."
+            if (!hasPoint) return false
+            val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+            val pDate = pointDate?.substringBefore("T")?.trim()
+            if (!pDate.isNullOrBlank()) {
+                return pDate < todayStr
+            }
+            val mDate = date.substringBefore("T")?.trim()
+            if (!mDate.isNullOrBlank()) {
+                try {
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                    val d = sdf.parse(mDate)
+                    if (d != null) {
+                        val cal = java.util.Calendar.getInstance()
+                        cal.time = d
+                        cal.add(java.util.Calendar.DAY_OF_YEAR, 14)
+                        val expDateStr = sdf.format(cal.time)
+                        return expDateStr < todayStr
+                    }
+                } catch (_: Exception) {}
+            }
+            return false
+        }
+}
 
 data class LessonMaterialItem(
     val title: String,
@@ -171,11 +199,66 @@ data class DetailedMarkResponseDTO(
     @SerializedName("control_form_name") val controlFormName: String? = null,
     @SerializedName("comment") val comment: String? = null,
     @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null,
     @SerializedName("date") val date: String? = null,
     @SerializedName("is_point") val isPoint: Boolean? = null,
     @SerializedName("point_date") val pointDate: String? = null,
     @SerializedName("is_exam") val isExam: Boolean? = null,
+    @SerializedName("history") val history: List<MarkHistoryItemDTO>? = null,
     @SerializedName("class_results") val classResults: ClassResultsDTO? = null
+) {
+    val isPointCorrected: Boolean
+        get() = history?.any { item ->
+            val b = item.before
+            b?.isPoint == true || b?.value?.contains(".") == true || !b?.pointDate.isNullOrBlank()
+        } == true
+
+    val hasCorrection: Boolean
+        get() = !history.isNullOrEmpty()
+
+    val isPointExpired: Boolean
+        get() {
+            val hasPoint = isPoint == true || !pointDate.isNullOrBlank() || value?.endsWith(".") == true || value == "."
+            if (!hasPoint) return false
+            val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+            val pDate = pointDate?.substringBefore("T")?.trim()
+            if (!pDate.isNullOrBlank()) {
+                return pDate < todayStr
+            }
+            val mDate = date?.substringBefore("T")?.trim()
+            if (!mDate.isNullOrBlank()) {
+                try {
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                    val d = sdf.parse(mDate)
+                    if (d != null) {
+                        val cal = java.util.Calendar.getInstance()
+                        cal.time = d
+                        cal.add(java.util.Calendar.DAY_OF_YEAR, 14)
+                        val expDateStr = sdf.format(cal.time)
+                        return expDateStr < todayStr
+                    }
+                } catch (_: Exception) {}
+            }
+            return false
+        }
+}
+
+data class MarkHistoryItemDTO(
+    @SerializedName("date") val date: String? = null,
+    @SerializedName("before") val before: SimpleMarkDTO? = null,
+    @SerializedName("after") val after: SimpleMarkDTO? = null
+)
+
+data class SimpleMarkDTO(
+    @SerializedName("id") val id: Long? = null,
+    @SerializedName("value") val value: String? = null,
+    @SerializedName("weight") val weight: Double? = null,
+    @SerializedName("comment") val comment: String? = null,
+    @SerializedName("control_form_name") val controlFormName: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("date") val date: String? = null,
+    @SerializedName("is_point") val isPoint: Boolean? = null,
+    @SerializedName("point_date") val pointDate: String? = null
 )
 
 data class ClassResultsDTO(
@@ -276,6 +359,10 @@ data class SubjectMarksShortItemDTO(
     @SerializedName("average") val average: String? = null,
     @SerializedName("dynamic") val dynamic: String? = null,
     @SerializedName("count") val count: Int? = null,
+    @SerializedName("fixed_value") val fixedValue: String? = null,
+    @SerializedName("period") val period: String? = null,
+    @SerializedName("start") val start: String? = null,
+    @SerializedName("end") val end: String? = null,
     @SerializedName("marks") val marks: List<MarkWithDateDTO>? = null,
     @SerializedName("periods") val periods: List<SubjectMarksPeriodItemDTO>? = null
 )
@@ -295,8 +382,25 @@ data class MarkWithDateDTO(
 data class SubjectMarksPeriodItemDTO(
     @SerializedName("title") val title: String? = null,
     @SerializedName("value") val value: String? = null,
+    @SerializedName("fixed_value") val fixedValue: String? = null,
     @SerializedName("count") val count: Int? = null,
+    @SerializedName("start") val start: String? = null,
+    @SerializedName("end") val end: String? = null,
+    @SerializedName("start_iso") val startIso: String? = null,
+    @SerializedName("end_iso") val endIso: String? = null,
+    @SerializedName("dynamic") val dynamic: String? = null,
     @SerializedName("marks") val marks: List<MarkWithDateDTO>? = null
+)
+
+data class SubjectPeriodInfo(
+    val title: String = "",
+    val average: Double = 0.0,
+    val value: String = "",
+    val fixedValue: String? = null,
+    val startDate: String = "",
+    val endDate: String = "",
+    val count: Int = 0,
+    val marks: List<MarkItem> = emptyList()
 )
 
 data class MarkByDateItemDTO(
@@ -365,8 +469,48 @@ data class MarkItem(
     val isExam: Boolean = false,
     val controlFormName: String? = null,
     val comment: String? = null,
-    val createdAt: String? = null
-)
+    val createdAt: String? = null,
+    val isPointCorrected: Boolean = false,
+    val hasCorrection: Boolean = false
+) {
+    val isPointExpired: Boolean
+        get() {
+            val hasPoint = isPoint || !pointDate.isNullOrBlank() || rawValue.endsWith(".") || rawValue == "."
+            if (!hasPoint) return false
+            val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+            val pDate = pointDate?.substringBefore("T")?.trim()
+            if (!pDate.isNullOrBlank()) {
+                return pDate < todayStr
+            }
+            val mDate = date.substringBefore("T")?.trim()
+            if (!mDate.isNullOrBlank()) {
+                try {
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                    val d = sdf.parse(mDate)
+                    if (d != null) {
+                        val cal = java.util.Calendar.getInstance()
+                        cal.time = d
+                        cal.add(java.util.Calendar.DAY_OF_YEAR, 14)
+                        val expDateStr = sdf.format(cal.time)
+                        return expDateStr < todayStr
+                    }
+                } catch (_: Exception) {}
+            }
+            return false
+        }
+
+    val effectiveValue: Int
+        get() {
+            val hasPoint = isPoint || !pointDate.isNullOrBlank() || rawValue.endsWith(".") || rawValue == "."
+            if (hasPoint) {
+                if (isPointExpired) {
+                    return if (value in 2..5) value else 2
+                }
+                return if (value in 2..5) value else 0
+            }
+            return value
+        }
+}
 
 /**
  * Сводка по предмету
@@ -375,23 +519,37 @@ data class SubjectSummary(
     val subject: String = "",
     val subjectId: Long = 0L,
     val averageMark: Double = 0.0,
+    val finalMark: String? = null,
     val marks: List<MarkItem> = emptyList(),
+    val periods: List<SubjectPeriodInfo> = emptyList(),
     val targetMark: Double = 4.60,
     val teacher: String = "Учитель предмета"
 ) {
     fun getEffectiveAverage(showWeighted: Boolean): Double {
-        val validMarks = marks.filter { !it.isPoint && it.value in 2..5 }
+        val validMarks = marks.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
         if (validMarks.isEmpty()) return averageMark
         return if (showWeighted) {
             val totalWeight = validMarks.sumOf { it.weight }
             if (totalWeight > 0.0) {
-                validMarks.sumOf { it.value * it.weight } / totalWeight
+                validMarks.sumOf { it.effectiveValue * it.weight } / totalWeight
             } else averageMark
         } else {
-            validMarks.map { it.value }.average()
+            validMarks.map { it.effectiveValue }.average()
         }
     }
 }
+
+/**
+ * Учебный период для селектора четвертей/семестров
+ */
+data class StudyPeriodOption(
+    val id: String = "",
+    val title: String = "",
+    val shortTitle: String = "",
+    val startDate: String = "",
+    val endDate: String = "",
+    val isCurrent: Boolean = false
+)
 
 /**
  * Геймификация: Профиль и звезды

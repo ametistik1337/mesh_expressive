@@ -571,7 +571,9 @@ class MeshMainViewModel(
             markWeight = mark.weight,
             markComment = mark.comment,
             markControlForm = mark.controlFormName,
-            markCreatedAt = mark.createdAt
+            markCreatedAt = mark.createdAt,
+            isPointCorrected = mark.isPointCorrected,
+            hasCorrection = mark.hasCorrection
         )
         openMarkDetails(pseudoLesson)
     }

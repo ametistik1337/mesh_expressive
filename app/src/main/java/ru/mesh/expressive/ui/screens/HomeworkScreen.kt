@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,24 +17,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ru.mesh.expressive.data.model.HomeworkItem
 import ru.mesh.expressive.ui.components.ExpressiveEmptyState
 import ru.mesh.expressive.ui.components.ExpressivePullToRefreshBox
-import ru.mesh.expressive.ui.components.M3WavyProgressIndicator
+import ru.mesh.expressive.ui.components.M3ConnectedButtonGroup
 import ru.mesh.expressive.ui.components.expressiveBounceClick
 import ru.mesh.expressive.ui.theme.*
 import ru.mesh.expressive.ui.viewmodel.MeshMainViewModel
 
 @Composable
 fun HomeworkScreen(viewModel: MeshMainViewModel) {
+    val haptic = LocalHapticFeedback.current
     val homeworkList by viewModel.homeworkList.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     var filter by remember { mutableStateOf("На завтра") }
-    val filters = listOf("На завтра", "Все", "Невыполненные", "С тестами ЦДЗ")
+    val filters = listOf("На завтра", "Все", "Невыполненные", "с ЦДЗ")
 
     val tomorrowDateFormatted = remember {
         java.text.SimpleDateFormat("d MMMM", java.util.Locale("ru")).format(java.util.Date(System.currentTimeMillis() + 86400000L))
@@ -77,7 +82,7 @@ fun HomeworkScreen(viewModel: MeshMainViewModel) {
                 }
             }
             "Невыполненные" -> baseList.filter { !it.isDone }
-            "С тестами ЦДЗ" -> baseList.filter { it.hasDigitalTest }
+            "с ЦДЗ" -> baseList.filter { it.hasDigitalTest }
             else -> baseList
         }
     }
@@ -94,93 +99,73 @@ fun HomeworkScreen(viewModel: MeshMainViewModel) {
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 120.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 120.dp)
         ) {
-            // Header Card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = ExpressiveHeroShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
+            // Compact Header
+            item(key = "homework_header") {
+                val uncompletedCount = remember(homeworkList) { homeworkList.count { !it.isDone } }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Домашние задания",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                val taskText = when {
-                                    totalCount == 0 -> "Нет активных заданий"
-                                    totalCount % 10 == 1 && totalCount % 100 != 11 -> "$totalCount задание"
-                                    totalCount % 10 in 2..4 && totalCount % 100 !in 12..14 -> "$totalCount задания"
-                                    else -> "$totalCount заданий"
-                                }
-                                Text(
-                                    text = taskText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                                )
-                            }
+                    Column {
+                        Text(
+                            text = "Домашние задания",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        val taskText = when {
+                            uncompletedCount == 0 && totalCount > 0 -> "Все задания выполнены"
+                            totalCount == 0 -> "Нет активных заданий"
+                            uncompletedCount % 10 == 1 && uncompletedCount % 100 != 11 -> "$uncompletedCount осталось сдать"
+                            uncompletedCount % 10 in 2..4 && uncompletedCount % 100 !in 12..14 -> "$uncompletedCount осталось сдать"
+                            else -> "$uncompletedCount осталось сдать"
+                        }
+                        Text(
+                            text = taskText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
 
-                            if (totalCount > 0) {
-                                Surface(
-                                    shape = PillShape,
-                                    color = MaterialTheme.colorScheme.primary
-                                ) {
-                                    Text(
-                                        text = "$totalCount",
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimary
-                                    )
-                                }
-                            }
+                    if (totalCount > 0) {
+                        Surface(
+                            shape = PillShape,
+                            color = if (uncompletedCount > 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            Text(
+                                text = if (uncompletedCount > 0) "$uncompletedCount из $totalCount" else "$totalCount",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (uncompletedCount > 0) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             }
 
-            // Filters LazyRow
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(filters) { f ->
-                        val isSelected = f == filter
-                        val bgColor by animateColorAsState(
-                            targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
-                            label = "filterBg"
-                        )
-                        val textColor by animateColorAsState(
-                            targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                            label = "filterText"
-                        )
-
-                        Surface(
-                            shape = PillShape,
-                            color = bgColor,
-                            modifier = Modifier
-                                .clip(PillShape)
-                                .clickable { filter = f }
-                        ) {
-                            Text(
-                                text = f,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = textColor
-                            )
-                        }
-                    }
+            // Filters M3 Connected Button Group
+            item(key = "homework_filters") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    M3ConnectedButtonGroup(
+                        items = filters,
+                        selectedItem = filter,
+                        onItemSelected = { filter = it },
+                        label = { it },
+                        showCheckmark = true,
+                        scrollable = true
+                    )
                 }
             }
 
@@ -190,7 +175,7 @@ fun HomeworkScreen(viewModel: MeshMainViewModel) {
                     val emptySubtitle = when (filter) {
                         "На завтра" -> "На ближайший учебный день заданий не найдено"
                         "Невыполненные" -> "Все домашние задания выполнены!"
-                        "С тестами ЦДЗ" -> "Заданий с тестами ЦДЗ не найдено"
+                        "с ЦДЗ" -> "Заданий с ЦДЗ не найдено"
                         else -> "Домашние задания отсутствуют"
                     }
                     ExpressiveEmptyState(
@@ -200,126 +185,124 @@ fun HomeworkScreen(viewModel: MeshMainViewModel) {
                     )
                 }
             } else {
-                items(filteredList) { hw ->
+                items(filteredList, key = { it.id }) { hw ->
                     val hwColor = if (hw.isDone)
                         MaterialTheme.colorScheme.surfaceContainerLowest
                     else
                         MaterialTheme.colorScheme.surfaceContainerLow
+
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .expressiveBounceClick { viewModel.openHomeworkDetails(hw) },
-                        shape = ExpressiveCardShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = hwColor
-                        )
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = hwColor)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            // Leading interactive Checkbox
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        viewModel.toggleHomework(hw.id)
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    modifier = Modifier
-                                        .weight(1f, fill = false)
-                                        .padding(end = 8.dp)
+                                Icon(
+                                    imageVector = if (hw.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                    contentDescription = if (hw.isDone) "Выполнено" else "Отметить",
+                                    tint = if (hw.isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Main homework content
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { viewModel.openHomeworkDetails(hw) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = hw.subject,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                        style = MaterialTheme.typography.labelMedium,
+                                        style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
+                                        color = if (hw.isDone) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
                                     )
-                                }
 
-                                val hasDifferentDates = hw.rawTargetDate.isNotBlank() && hw.rawDueDate.isNotBlank() && hw.rawTargetDate != hw.rawDueDate
-                                val dateBadgeText = if (hasDifferentDates) {
-                                    "На ${hw.targetDate} • До ${hw.dueDate}"
-                                } else {
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    val isUrgent = hw.dueDate == "Завтра" || hw.targetDate == "Завтра" || hw.dueDate == "Сегодня"
                                     val displayDate = if (hw.targetDate.isNotBlank()) hw.targetDate else hw.dueDate
-                                    "Срок: $displayDate"
-                                }
-                                val isUrgent = hw.dueDate == "Завтра" || hw.targetDate == "Завтра" || hw.dueDate == "Сегодня"
-                                Surface(
-                                    shape = PillShape,
-                                    color = if (isUrgent) ScoreOrangeContainer else MaterialTheme.colorScheme.surfaceVariant
-                                ) {
-                                    Text(
-                                        text = dateBadgeText,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (isUrgent) ScoreOrange else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        softWrap = false,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
+                                    val dateBadgeText = if (displayDate.isNotBlank()) displayDate else "Срок"
 
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Text(
-                                text = hw.description,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (hw.isDone) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (hw.hasDigitalTest) {
                                     Surface(
                                         shape = PillShape,
-                                        color = MaterialTheme.colorScheme.secondaryContainer
+                                        color = if (isUrgent) ScoreOrangeContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+                                    ) {
+                                        Text(
+                                            text = dateBadgeText,
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isUrgent) ScoreOrange else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            softWrap = false,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    text = hw.description,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = if (hw.isDone) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                                )
+
+                                if (hw.hasDigitalTest) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Surface(
+                                        shape = PillShape,
+                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.OpenInNew,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                modifier = Modifier.size(14.dp)
+                                                modifier = Modifier.size(12.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = "Тест в библиотеке МЭШ",
+                                                text = "Тест в ЦДЗ",
                                                 style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Medium,
                                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                                             )
                                         }
                                     }
-                                } else {
-                                    Spacer(modifier = Modifier.width(1.dp))
-                                }
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.clickable { viewModel.toggleHomework(hw.id) }
-                                ) {
-                                    Icon(
-                                        imageVector = if (hw.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                        contentDescription = null,
-                                        tint = if (hw.isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (hw.isDone) "Готово" else "Отметить",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (hw.isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
                                 }
                             }
                         }

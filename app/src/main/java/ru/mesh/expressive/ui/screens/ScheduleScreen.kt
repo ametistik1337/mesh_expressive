@@ -7,10 +7,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
@@ -23,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,6 +41,7 @@ import ru.mesh.expressive.ui.viewmodel.MeshMainViewModel
 
 @Composable
 fun ScheduleScreen(viewModel: MeshMainViewModel) {
+    val haptic = LocalHapticFeedback.current
     val weekSchedule by viewModel.weekSchedule.collectAsState()
     val scheduleToday by viewModel.scheduleToday.collectAsState()
     val scheduleTomorrow by viewModel.scheduleTomorrow.collectAsState()
@@ -279,30 +285,50 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // True Material 3 Day Chips Row (Пн–Сб)
+                        // Material 3 Connected Button Group for Weekdays (Пн–Сб)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            displayedWeekDays.forEach { day ->
+                            displayedWeekDays.forEachIndexed { index, day ->
                                 val isSelected = day.dayIndex == selectedDayIndex
+                                val isFirst = index == 0
+                                val isLast = index == displayedWeekDays.size - 1
                                 val isToday = day.isToday
+                                val isDark = isSystemInDarkTheme()
+
+                                val shape: Shape = when {
+                                    displayedWeekDays.size == 1 -> RoundedCornerShape(percent = 50)
+                                    isFirst -> RoundedCornerShape(
+                                        topStart = CornerSize(50),
+                                        bottomStart = CornerSize(50),
+                                        topEnd = CornerSize(8.dp),
+                                        bottomEnd = CornerSize(8.dp)
+                                    )
+                                    isLast -> RoundedCornerShape(
+                                        topStart = CornerSize(8.dp),
+                                        bottomStart = CornerSize(8.dp),
+                                        topEnd = CornerSize(50),
+                                        bottomEnd = CornerSize(50)
+                                    )
+                                    else -> RoundedCornerShape(8.dp)
+                                }
 
                                 val chipBgColor by animateColorAsState(
                                     targetValue = when {
                                         isSelected -> MaterialTheme.colorScheme.primary
-                                        isToday -> MaterialTheme.colorScheme.primaryContainer
-                                        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+                                        isToday -> if (isDark) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
+                                        else -> if (isDark) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh
                                     },
-                                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
+                                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 700f),
                                     label = "chipBg"
                                 )
 
                                 val dayNameColor by animateColorAsState(
                                     targetValue = when {
                                         isSelected -> MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
-                                        isToday -> MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                                        isToday -> if (isDark) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
                                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                                     },
                                     label = "dayNameColor"
@@ -311,7 +337,7 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
                                 val dayNumColor by animateColorAsState(
                                     targetValue = when {
                                         isSelected -> MaterialTheme.colorScheme.onPrimary
-                                        isToday -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        isToday -> if (isDark) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
                                         else -> MaterialTheme.colorScheme.onSurface
                                     },
                                     label = "dayNumColor"
@@ -320,12 +346,17 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .expressiveBounceClick { selectedDayIndex = day.dayIndex },
-                                    shape = RoundedCornerShape(10.dp),
+                                        .height(40.dp)
+                                        .clip(shape)
+                                        .clickable {
+                                            if (!isSelected) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                selectedDayIndex = day.dayIndex
+                                            }
+                                        },
+                                    shape = shape,
                                     color = chipBgColor,
-                                    border = if (isToday && !isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
+                                    border = null
                                 ) {
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
@@ -335,6 +366,15 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.Center
                                         ) {
+                                            if (isToday && !isSelected) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(5.dp)
+                                                        .clip(CircleShape)
+                                                        .background(MaterialTheme.colorScheme.primary)
+                                                )
+                                                Spacer(modifier = Modifier.width(3.dp))
+                                            }
                                             Text(
                                                 text = day.dayName,
                                                 style = MaterialTheme.typography.labelSmall,

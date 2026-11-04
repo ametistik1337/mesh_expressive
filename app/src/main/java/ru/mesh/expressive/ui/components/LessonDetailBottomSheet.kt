@@ -2,8 +2,10 @@ package ru.mesh.expressive.ui.components
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -473,31 +475,44 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
 
     if (selectedMarkLesson != null) {
         val lesson = selectedMarkLesson!!
+        val isDark = isSystemInDarkTheme()
         val isPoint = lesson.isPoint || (detailedMark?.isPoint == true) || lesson.rawMark?.endsWith(".") == true || (detailedMark?.value?.endsWith(".") == true) || lesson.rawMark == "."
+        val isPointCorrected = detailedMark?.isPointCorrected == true || lesson.isPointCorrected || (detailedMark?.history.orEmpty().any { it.before?.isPoint == true || it.before?.value == "." })
+        val markHistory = detailedMark?.history.orEmpty()
         val pointDateRaw = detailedMark?.pointDate ?: lesson.pointDate
         val formattedPointDate = ru.mesh.expressive.util.DateUtils.formatPointDate(pointDateRaw)
+        val isExpired = lesson.isPointExpired || (detailedMark?.isPointExpired == true)
+        val weightVal = detailedMark?.weight ?: lesson.markWeight
 
         val rawVal = detailedMark?.value ?: lesson.rawMark
         val displayVal = when {
+            isPoint && isExpired -> if (lesson.mark != null && lesson.mark in 2..5) "${lesson.mark}" else "2"
             !rawVal.isNullOrBlank() -> rawVal
             isPoint -> if (lesson.mark != null) "${lesson.mark}." else "•"
             lesson.mark != null -> "${lesson.mark}"
             else -> "—"
         }
+        val displayValFormatted = if (isPointCorrected && !isPoint && !displayVal.contains("*")) "$displayVal*" else displayVal
 
-        val myMarkNumeric = lesson.mark ?: displayVal.removeSuffix(".").toIntOrNull()
+        val myMarkNumeric = when {
+            isPoint && isExpired -> if (lesson.mark != null && lesson.mark in 2..5) lesson.mark else 2
+            else -> lesson.mark ?: displayVal.removeSuffix(".").toIntOrNull()
+        }
 
         val (markBadgeBg, markBadgeFg) = when {
-            isPoint -> ScoreOrangeContainer to ScoreOrange
-            (myMarkNumeric ?: 0) >= 4 -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-            else -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+            isPoint && isExpired -> (if (isDark) ScoreRedContainerDark else ScoreRedContainerLight) to (if (isDark) ScoreRedDark else ScoreRedLight)
+            isPoint -> (if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0)) to (if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100))
+            (myMarkNumeric ?: 0) >= 5 -> (if (isDark) ScoreGreenContainerDark else ScoreGreenContainerLight) to (if (isDark) ScoreGreenDark else ScoreGreenLight)
+            (myMarkNumeric ?: 0) == 4 -> (if (isDark) ScoreBlueContainerDark else ScoreBlueContainerLight) to (if (isDark) ScoreBlueDark else ScoreBlueLight)
+            (myMarkNumeric ?: 0) == 3 -> (if (isDark) ScoreOrangeContainerDark else ScoreOrangeContainerLight) to (if (isDark) ScoreOrangeDark else ScoreOrangeLight)
+            else -> (if (isDark) ScoreRedContainerDark else ScoreRedContainerLight) to (if (isDark) ScoreRedDark else ScoreRedLight)
         }
 
         ModalBottomSheet(
             onDismissRequest = { viewModel.closeMarkDetails() },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             windowInsets = WindowInsets(0, 0, 0, 0),
-            shape = ExpressiveCardShape,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ) {
             Column(
@@ -514,13 +529,14 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
-                        shape = CircleShape,
+                        shape = RoundedCornerShape(16.dp),
                         color = markBadgeBg,
                         modifier = Modifier.size(56.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
+                            val weightSuper = if (weightVal > 1.0) formatWeightSuperscript(weightVal) else ""
                             Text(
-                                text = displayVal,
+                                text = "$displayValFormatted$weightSuper",
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = markBadgeFg
@@ -539,16 +555,45 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                             )
                             if (isPoint) {
                                 Spacer(modifier = Modifier.width(8.dp))
+                                if (isExpired) {
+                                    Surface(
+                                        shape = PillShape,
+                                        color = if (isDark) ScoreRedContainerDark else ScoreRedContainerLight
+                                    ) {
+                                        Text(
+                                            text = "Точка истекла",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isDark) ScoreRedDark else ScoreRedLight
+                                        )
+                                    }
+                                } else {
+                                    Surface(
+                                        shape = PillShape,
+                                        color = if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0)
+                                    ) {
+                                        Text(
+                                            text = if (!formattedPointDate.isNullOrBlank()) "Точка до $formattedPointDate" else "Точка",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
+                                        )
+                                    }
+                                }
+                            } else if (isPointCorrected) {
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Surface(
                                     shape = PillShape,
-                                    color = ScoreOrange
+                                    color = if (isDark) ScoreBlueContainerDark else ScoreBlueContainerLight
                                 ) {
                                     Text(
-                                        text = "Точка",
+                                        text = "Точка исправлена на $displayVal",
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White
+                                        color = if (isDark) ScoreBlueDark else ScoreBlueLight
                                     )
                                 }
                             }
@@ -559,25 +604,25 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        val weightVal = detailedMark?.weight ?: lesson.markWeight
                         Text(
                             text = "Вес оценки: $weightVal",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                // If it is a point, display info card with point expiration date
-                if (isPoint) {
+                // If it is an active point, display info card with point expiration date
+                if (isPoint && !isExpired) {
                     Spacer(modifier = Modifier.height(14.dp))
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = ExpressiveCardShape,
+                        shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = ScoreOrangeContainer.copy(alpha = 0.5f)
-                        )
+                            containerColor = if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0)
+                        ),
+                        border = BorderStroke(1.dp, if (isDark) Color(0xFFFB843D).copy(alpha = 0.45f) else Color(0xFFFFCC80))
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp),
@@ -586,16 +631,16 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                             Icon(
                                 Icons.Default.HourglassTop,
                                 contentDescription = null,
-                                tint = ScoreOrange,
+                                tint = if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100),
                                 modifier = Modifier.size(28.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = if (formattedPointDate.isNotBlank()) "Будет выставлена: $formattedPointDate" else "Временная отметка (точка)",
+                                    text = if (!formattedPointDate.isNullOrBlank()) "Будет выставлена: $formattedPointDate" else "Временная отметка (точка)",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = ScoreOrange
+                                    color = if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
@@ -613,18 +658,18 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                 if (!commentText.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Surface(
-                        shape = ExpressiveCardShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 Icons.Default.Comment,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.primary
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = commentText,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -640,24 +685,164 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                 val formattedDate = ru.mesh.expressive.util.DateUtils.formatRelativeDateTime(rawCreatedAt)
                 if (formattedDate.isNotBlank()) {
                     Surface(
-                        shape = ExpressiveCardShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 Icons.Default.AccessTime,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Дата выставления: $formattedDate",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+                        }
+                    }
+                }
+
+                // History of mark corrections (matching original MESH getFlatMarksHistory)
+                if (markHistory.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.History,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "История изменений",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            markHistory.forEachIndexed { idx, hItem ->
+                                val beforeVal = when {
+                                    hItem.before?.isPoint == true || hItem.before?.value == "." -> "• Точка"
+                                    !hItem.before?.value.isNullOrBlank() -> hItem.before?.value!!
+                                    else -> "• Точка"
+                                }
+                                val afterVal = when {
+                                    hItem.after?.isPoint == true || hItem.after?.value == "." -> "• Точка"
+                                    !hItem.after?.value.isNullOrBlank() -> hItem.after?.value!!
+                                    else -> displayVal
+                                }
+                                val dateBeforeStr = hItem.before?.createdAt ?: hItem.date ?: ""
+                                val dateAfterStr = hItem.after?.createdAt ?: hItem.date ?: ""
+                                val formattedDateBefore = if (dateBeforeStr.isNotBlank()) ru.mesh.expressive.util.DateUtils.formatRelativeDateTime(dateBeforeStr) else ""
+                                val formattedDateAfter = if (dateAfterStr.isNotBlank()) ru.mesh.expressive.util.DateUtils.formatRelativeDateTime(dateAfterStr) else ""
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    // Before Node
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Surface(
+                                            shape = PillShape,
+                                            color = if (beforeVal.contains("Точка"))
+                                                (if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0))
+                                            else
+                                                MaterialTheme.colorScheme.surfaceVariant,
+                                            border = if (beforeVal.contains("Точка"))
+                                                BorderStroke(1.dp, if (isDark) Color(0xFFFB843D).copy(alpha = 0.45f) else Color(0xFFFFCC80))
+                                            else null
+                                        ) {
+                                            Text(
+                                                text = beforeVal,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (beforeVal.contains("Точка"))
+                                                    (if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100))
+                                                else
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (formattedDateBefore.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = formattedDateBefore,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    // Arrow Connector
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowForward,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier
+                                            .padding(horizontal = 8.dp)
+                                            .size(20.dp)
+                                    )
+
+                                    // After Node
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        val afterNum = afterVal.removeSuffix("*").toIntOrNull()
+                                        val (afterBg, afterFg) = when {
+                                            afterVal.contains("Точка") -> (if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0)) to (if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100))
+                                            (afterNum ?: 0) >= 5 -> (if (isDark) ScoreGreenContainerDark else ScoreGreenContainerLight) to (if (isDark) ScoreGreenDark else ScoreGreenLight)
+                                            (afterNum ?: 0) == 4 -> (if (isDark) ScoreBlueContainerDark else ScoreBlueContainerLight) to (if (isDark) ScoreBlueDark else ScoreBlueLight)
+                                            (afterNum ?: 0) == 3 -> (if (isDark) ScoreOrangeContainerDark else ScoreOrangeContainerLight) to (if (isDark) ScoreOrangeDark else ScoreOrangeLight)
+                                            else -> (if (isDark) ScoreRedContainerDark else ScoreRedContainerLight) to (if (isDark) ScoreRedDark else ScoreRedLight)
+                                        }
+                                        Surface(
+                                            shape = PillShape,
+                                            color = afterBg
+                                        ) {
+                                            Text(
+                                                text = if (afterVal.contains("Точка") || afterVal.contains("*")) afterVal else "$afterVal*",
+                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = afterFg
+                                            )
+                                        }
+                                        if (formattedDateAfter.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = formattedDateAfter,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                                if (idx < markHistory.size - 1) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -682,11 +867,11 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                     if (distributions.isNotEmpty() && totalStudents > 0) {
                         Surface(
                             shape = PillShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
                             Text(
                                 text = "$totalStudents ${if (totalStudents % 10 == 1 && totalStudents % 100 != 11) "оценка" else "оценок"}",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -695,11 +880,11 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                     } else if (ranks.isNotEmpty()) {
                         Surface(
                             shape = PillShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
                             Text(
                                 text = "${ranks.size} уч.",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -733,20 +918,25 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                             val isMyGrade = myMarkNumeric != null && myMarkNumeric == markVal
 
                             val (gradeBg, gradeFg) = when (markVal) {
-                                5 -> ScoreGreenContainer to ScoreGreen
-                                4 -> ScoreBlueContainer to ScoreBlue
-                                3 -> ScoreOrangeContainer to ScoreOrange
-                                else -> ScoreRedContainer to ScoreRed
+                                5 -> (if (isDark) ScoreGreenContainerDark else ScoreGreenContainerLight) to (if (isDark) ScoreGreenDark else ScoreGreenLight)
+                                4 -> (if (isDark) ScoreBlueContainerDark else ScoreBlueContainerLight) to (if (isDark) ScoreBlueDark else ScoreBlueLight)
+                                3 -> (if (isDark) ScoreOrangeContainerDark else ScoreOrangeContainerLight) to (if (isDark) ScoreOrangeDark else ScoreOrangeLight)
+                                else -> (if (isDark) ScoreRedContainerDark else ScoreRedContainerLight) to (if (isDark) ScoreRedDark else ScoreRedLight)
                             }
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = ExpressiveCardShape,
+                                shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (isMyGrade) gradeBg.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceContainerLow
-                                )
+                                    containerColor = if (isMyGrade) {
+                                        if (isDark) gradeBg.copy(alpha = 0.45f) else gradeBg.copy(alpha = 0.35f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                    }
+                                ),
+                                border = if (isMyGrade) BorderStroke(1.dp, gradeFg.copy(alpha = 0.5f)) else null
                             ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
+                                Column(modifier = Modifier.padding(14.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
@@ -754,14 +944,14 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Surface(
-                                                shape = CircleShape,
+                                                shape = RoundedCornerShape(8.dp),
                                                 color = gradeBg,
-                                                modifier = Modifier.size(28.dp)
+                                                modifier = Modifier.size(32.dp)
                                             ) {
                                                 Box(contentAlignment = Alignment.Center) {
                                                     Text(
                                                         text = "$markVal",
-                                                        style = MaterialTheme.typography.labelMedium,
+                                                        style = MaterialTheme.typography.labelLarge,
                                                         fontWeight = FontWeight.Bold,
                                                         color = gradeFg
                                                     )
@@ -782,10 +972,10 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                                                 ) {
                                                     Text(
                                                         text = "Ваша оценка",
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
                                                         style = MaterialTheme.typography.labelSmall,
                                                         fontWeight = FontWeight.Bold,
-                                                        color = Color.White
+                                                        color = if (isDark) Color(0xFF1B1B1F) else Color.White
                                                     )
                                                 }
                                             }
@@ -799,7 +989,7 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                                         )
                                     }
 
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
 
                                     LinearProgressIndicator(
                                         progress = (pct / 100f).coerceIn(0f, 1f),
@@ -808,7 +998,7 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                                             .height(6.dp)
                                             .clip(RoundedCornerShape(3.dp)),
                                         color = gradeFg,
-                                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                        trackColor = if (isDark) Color(0xFF2B2930) else MaterialTheme.colorScheme.surfaceVariant
                                     )
                                 }
                             }

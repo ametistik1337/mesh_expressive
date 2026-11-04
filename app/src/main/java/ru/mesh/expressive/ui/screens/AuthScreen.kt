@@ -45,7 +45,7 @@ import ru.mesh.expressive.ui.components.M3WavyProgressIndicator
 import ru.mesh.expressive.ui.theme.*
 import ru.mesh.expressive.ui.viewmodel.MeshMainViewModel
 
-private const val MOS_RU_AUTH_URL = "https://login.mos.ru/sps/oauth/ae?client_id=dnevnik.mos.ru&redirect_uri=https://school.mos.ru/&response_type=code&scope=openid+profile+snils+contacts+birthday"
+private const val MOS_RU_AUTH_URL = "https://school.mos.ru/v3/auth/sudir/login"
 
 enum class AuthScreenState {
     WELCOME_LANDING, WEB_MOS_RU, ROOT_AND_MANUAL_TOKEN

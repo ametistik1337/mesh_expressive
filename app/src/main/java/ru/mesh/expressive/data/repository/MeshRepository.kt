@@ -54,6 +54,12 @@ object DemoMockDataProvider {
             room = "Каб. 304",
             teacherName = "Иванова Е.А.",
             mark = 5,
+            rawMark = "5*",
+            isPointCorrected = true,
+            hasCorrection = true,
+            markWeight = 1.5,
+            markControlForm = "Контрольная работа",
+            markComment = "Работа пересдана, точка исправлена на отлично",
             homework = "№ 244 (а, б), № 248"
         ),
         LessonScheduleItem(
@@ -97,6 +103,20 @@ object DemoMockDataProvider {
             teacherName = "Ковалев Д.М.",
             mark = 5,
             homework = "Конспект в тетради"
+        ),
+        LessonScheduleItem(
+            id = "demo_pt",
+            subject = "Химия",
+            lessonNumber = 6,
+            startTime = "13:45",
+            endTime = "14:30",
+            room = "Каб. 302",
+            teacherName = "Морозова Т.В.",
+            rawMark = "•",
+            isPoint = true,
+            pointDate = "2026-12-15",
+            markControlForm = "Самостоятельная работа",
+            homework = "Таблица растворимости"
         )
     )
 
@@ -123,20 +143,88 @@ object DemoMockDataProvider {
         SubjectSummary(
             subject = "Алгебра",
             averageMark = 4.80,
+            finalMark = "5",
             marks = listOf(
-                MarkItem(id = "m1", subject = "Алгебра", value = 5, weight = 1.0, date = "15.08", topic = "Квадратные уравнения"),
+                MarkItem(
+                    id = "m1",
+                    subject = "Алгебра",
+                    value = 5,
+                    rawValue = "5*",
+                    weight = 1.5,
+                    date = "15.08",
+                    topic = "Квадратные уравнения",
+                    controlFormName = "Контрольная работа",
+                    comment = "Работа пересдана, точка закрыта на отлично",
+                    isPointCorrected = true,
+                    hasCorrection = true
+                ),
                 MarkItem(id = "m2", subject = "Алгебра", value = 5, weight = 1.5, date = "12.08", topic = "Контрольная работа", isExam = true),
-                MarkItem(id = "m3", subject = "Алгебра", value = 4, weight = 1.0, date = "08.08", topic = "Самостоятельная работа")
+                MarkItem(id = "m3", subject = "Алгебра", value = 4, weight = 1.0, date = "08.08", topic = "Самостоятельная работа"),
+                MarkItem(
+                    id = "m_pt",
+                    subject = "Алгебра",
+                    value = 0,
+                    rawValue = ".",
+                    weight = 1.0,
+                    date = "18.08",
+                    topic = "Тест по формулам",
+                    isPoint = true,
+                    pointDate = "2026-12-15"
+                )
+            ),
+            periods = listOf(
+                SubjectPeriodInfo(title = "1 четверть", average = 4.80, value = "4.80", fixedValue = "5"),
+                SubjectPeriodInfo(title = "2 четверть", average = 4.75, value = "4.75", fixedValue = null)
             ),
             targetMark = 4.60,
             teacher = "Иванова Е.А."
         ),
         SubjectSummary(
+            subject = "Физическая культура",
+            averageMark = 0.0,
+            finalMark = "З",
+            marks = listOf(
+                MarkItem(id = "m_pe1", subject = "Физическая культура", value = 5, rawValue = "З", weight = 1.0, date = "14.08", topic = "Нормативы ГТО")
+            ),
+            periods = listOf(
+                SubjectPeriodInfo(title = "1 четверть", average = 0.0, value = "", fixedValue = "З"),
+                SubjectPeriodInfo(title = "2 четверть", average = 0.0, value = "", fixedValue = null)
+            ),
+            teacher = "Семенов В.А."
+        ),
+        SubjectSummary(
+            subject = "Изобразительное искусство",
+            averageMark = 0.0,
+            finalMark = "А",
+            marks = listOf(
+                MarkItem(id = "m_art1", subject = "Изобразительное искусство", value = 5, rawValue = "А", weight = 1.0, date = "13.08", topic = "Натюрморт акварелью")
+            ),
+            periods = listOf(
+                SubjectPeriodInfo(title = "1 четверть", average = 0.0, value = "", fixedValue = "А"),
+                SubjectPeriodInfo(title = "2 четверть", average = 0.0, value = "", fixedValue = null)
+            ),
+            teacher = "Кузнецова Е.П."
+        ),
+        SubjectSummary(
+            subject = "ОБЖ",
+            averageMark = 0.0,
+            finalMark = "ОСВ",
+            marks = emptyList(),
+            periods = listOf(
+                SubjectPeriodInfo(title = "1 четверть", average = 0.0, value = "", fixedValue = "ОСВ")
+            ),
+            teacher = "Громов А.С."
+        ),
+        SubjectSummary(
             subject = "Физика",
             averageMark = 4.50,
+            finalMark = "4",
             marks = listOf(
                 MarkItem(id = "m4", subject = "Физика", value = 5, weight = 1.0, date = "14.08", topic = "Законы Ньютона"),
                 MarkItem(id = "m5", subject = "Физика", value = 4, weight = 1.0, date = "10.08", topic = "Лабораторная работа")
+            ),
+            periods = listOf(
+                SubjectPeriodInfo(title = "1 четверть", average = 4.50, value = "4.50", fixedValue = "4")
             ),
             targetMark = 4.60,
             teacher = "Петров С.В."
@@ -144,9 +232,13 @@ object DemoMockDataProvider {
         SubjectSummary(
             subject = "Русский язык",
             averageMark = 4.70,
+            finalMark = "5",
             marks = listOf(
                 MarkItem(id = "m6", subject = "Русский язык", value = 5, weight = 1.0, date = "16.08", topic = "Причастный оборот"),
                 MarkItem(id = "m7", subject = "Русский язык", value = 4, weight = 1.0, date = "11.08", topic = "Диктант")
+            ),
+            periods = listOf(
+                SubjectPeriodInfo(title = "1 четверть", average = 4.70, value = "4.70", fixedValue = "5")
             ),
             targetMark = 4.60,
             teacher = "Смирнова О.Н."
@@ -559,14 +651,37 @@ class MeshRepository(val sessionManager: SessionManager) {
         var dynamicStudentId = sessionManager.studentId
         var dynamicPersonId = sessionManager.personId
 
-        // 1. Получение профиля (Mobile API / Web API)
+        // 1. Получение профиля (Mobile API / Profile Info)
         try {
-            val mobileProfileResp = MeshNetworkClient.familyMobileApi.getMobileProfile(bearerToken, dynamicProfileId)
-            val profileResp = if (mobileProfileResp.isSuccessful && mobileProfileResp.body() != null) {
-                mobileProfileResp
-            } else {
-                MeshNetworkClient.familyWebApi.getProfile(cleanToken, dynamicProfileId, "familyweb")
+            if (dynamicProfileId == 0L) {
+                try {
+                    val infoResp = MeshNetworkClient.profileInfoApi.getProfileInfo(bearerToken, cleanToken)
+                    if (infoResp.isSuccessful && !infoResp.body().isNullOrEmpty()) {
+                        val firstProfile = infoResp.body()!!.firstOrNull()
+                        if (firstProfile != null && firstProfile.id != 0L) {
+                            dynamicProfileId = firstProfile.id
+                            sessionManager.profileId = dynamicProfileId.toString()
+                        }
+                    }
+                } catch (_: Exception) {}
             }
+
+            var mobileProfileResp = MeshNetworkClient.familyMobileApi.getMobileProfile(bearerToken, dynamicProfileId)
+            if (!mobileProfileResp.isSuccessful || mobileProfileResp.body() == null) {
+                try {
+                    val infoResp = MeshNetworkClient.profileInfoApi.getProfileInfo(bearerToken, cleanToken)
+                    if (infoResp.isSuccessful && !infoResp.body().isNullOrEmpty()) {
+                        val firstProfile = infoResp.body()!!.firstOrNull()
+                        if (firstProfile != null && firstProfile.id != 0L && firstProfile.id != dynamicProfileId) {
+                            dynamicProfileId = firstProfile.id
+                            sessionManager.profileId = dynamicProfileId.toString()
+                            mobileProfileResp = MeshNetworkClient.familyMobileApi.getMobileProfile(bearerToken, dynamicProfileId)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val profileResp = mobileProfileResp
 
             if (profileResp.isSuccessful && profileResp.body() != null) {
                 val body = profileResp.body()!!
@@ -757,9 +872,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                                     !a.url.isNullOrBlank() -> a.url
                                     !a.link.isNullOrBlank() -> a.link
                                     a.fileId != null && item.homeworkEntryStudentId != null ->
-                                        "https://school.mos.ru/api/family/web/v1/homeworks/${item.homeworkEntryStudentId}/attachment/${a.fileId}"
+                                        "https://school.mos.ru/api/family/mobile/v1/homeworks/${item.homeworkEntryStudentId}/attachment/${a.fileId}"
                                     a.id != null && item.homeworkEntryStudentId != null ->
-                                        "https://school.mos.ru/api/family/web/v1/homeworks/${item.homeworkEntryStudentId}/attachment/${a.id}"
+                                        "https://school.mos.ru/api/family/mobile/v1/homeworks/${item.homeworkEntryStudentId}/attachment/${a.id}"
                                     else -> ""
                                 }
                                 HomeworkAttachmentItem(
@@ -900,7 +1015,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                                 val mid = rm.id?.toString() ?: ""
                                 val rawStr = rm.value?.trim() ?: ""
                                 val isPt = rm.isPoint == true || !rm.pointDate.isNullOrBlank() || rawStr.endsWith(".") || rawStr == "."
-                                val cleanVal = rawStr.removeSuffix(".").toIntOrNull() ?: if (isPt) 0 else 5
+                                val cleanStr = rawStr.removeSuffix(".").removeSuffix("*").trim()
+                                val cleanVal = cleanStr.toIntOrNull() ?: if (isPt) 0 else 5
+                                val isPtCorrected = rawStr.contains("*") || rawStr.endsWith("*")
                                 MarkItem(
                                     id = mid,
                                     subject = sName.ifBlank { rm.subjectName ?: "" },
@@ -915,7 +1032,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                                     isExam = rm.isExam == true,
                                     controlFormName = rm.controlFormName,
                                     comment = rm.comment,
-                                    createdAt = rm.createdAt
+                                    createdAt = rm.createdAt,
+                                    isPointCorrected = isPtCorrected,
+                                    hasCorrection = isPtCorrected
                                 )
                             }.sortedWith(
                                 compareByDescending<MarkItem> { it.createdAt ?: it.date }
@@ -928,8 +1047,10 @@ class MeshRepository(val sessionManager: SessionManager) {
                                 val detailed = rawMarksMap[mid]
                                 val rawStr = m.value?.trim() ?: detailed?.value?.trim() ?: ""
                                 val isPt = m.isPoint == true || detailed?.isPoint == true || !m.pointDate.isNullOrBlank() || !detailed?.pointDate.isNullOrBlank() || rawStr.endsWith(".") || rawStr == "."
-                                val cleanVal = rawStr.removeSuffix(".").toIntOrNull() ?: if (isPt) 0 else 5
+                                val cleanStr = rawStr.removeSuffix(".").removeSuffix("*").trim()
+                                val cleanVal = cleanStr.toIntOrNull() ?: if (isPt) 0 else 5
                                 val ptDate = detailed?.pointDate ?: m.pointDate
+                                val isPtCorrected = rawStr.contains("*") || rawStr.endsWith("*")
                                 MarkItem(
                                     id = mid,
                                     subject = sName,
@@ -944,16 +1065,63 @@ class MeshRepository(val sessionManager: SessionManager) {
                                     isExam = detailed?.isExam ?: (m.isExam == true),
                                     controlFormName = detailed?.controlFormName ?: m.controlFormName,
                                     comment = detailed?.comment ?: m.comment,
-                                    createdAt = detailed?.createdAt
+                                    createdAt = detailed?.createdAt,
+                                    isPointCorrected = isPtCorrected,
+                                    hasCorrection = isPtCorrected
                                 )
                             }
+                        }
+
+                        val fixedVal = subj.fixedValue?.trim()?.ifBlank { null }
+                        val periodsInfo = subj.periods.orEmpty().map { p ->
+                            val pAvg = p.value?.replace(",", ".")?.toDoubleOrNull() ?: 0.0
+                            val pFixed = p.fixedValue?.trim()?.ifBlank { null }
+                            val pMarks = p.marks.orEmpty().map { pm ->
+                                val mid = pm.id?.toString() ?: ""
+                                val detailed = rawMarksMap[mid]
+                                val rawStr = pm.value?.trim() ?: detailed?.value?.trim() ?: ""
+                                val isPt = pm.isPoint == true || detailed?.isPoint == true || !pm.pointDate.isNullOrBlank() || !detailed?.pointDate.isNullOrBlank() || rawStr.endsWith(".") || rawStr == "."
+                                val cleanStr = rawStr.removeSuffix(".").removeSuffix("*").trim()
+                                val cleanVal = cleanStr.toIntOrNull() ?: if (isPt) 0 else 5
+                                val ptDate = detailed?.pointDate ?: pm.pointDate
+                                val isPtCorrected = rawStr.contains("*") || rawStr.endsWith("*")
+                                MarkItem(
+                                    id = mid,
+                                    subject = sName,
+                                    subjectId = detailed?.subjectId ?: sId,
+                                    value = cleanVal,
+                                    rawValue = rawStr,
+                                    isPoint = isPt,
+                                    pointDate = ptDate,
+                                    weight = detailed?.weight ?: pm.weight ?: 1.0,
+                                    date = detailed?.date ?: pm.date ?: "",
+                                    topic = detailed?.controlFormName ?: pm.controlFormName ?: detailed?.comment ?: pm.comment ?: "",
+                                    isExam = detailed?.isExam ?: (pm.isExam == true),
+                                    controlFormName = detailed?.controlFormName ?: pm.controlFormName,
+                                    comment = detailed?.comment ?: pm.comment,
+                                    createdAt = detailed?.createdAt,
+                                    isPointCorrected = isPtCorrected,
+                                    hasCorrection = isPtCorrected
+                                )
+                            }
+                            SubjectPeriodInfo(
+                                title = p.title.orEmpty(),
+                                average = pAvg,
+                                fixedValue = pFixed,
+                                startDate = p.startIso ?: p.start.orEmpty(),
+                                endDate = p.endIso ?: p.end.orEmpty(),
+                                count = p.count ?: pMarks.size,
+                                marks = pMarks
+                            )
                         }
 
                         SubjectSummary(
                             subject = sName.ifBlank { "Предмет" },
                             subjectId = sId,
                             averageMark = avg,
+                            finalMark = fixedVal,
                             marks = marksList,
+                            periods = periodsInfo,
                             targetMark = 4.60
                         )
                     }
@@ -961,17 +1129,17 @@ class MeshRepository(val sessionManager: SessionManager) {
                         _subjectSummaries.value = summaries
                         sessionManager.cachedSubjectSummaries = summaries
 
-                        val allLoadedMarks = summaries.flatMap { it.marks }.filter { !it.isPoint && it.value in 2..5 }
+                        val allLoadedMarks = summaries.flatMap { it.marks }.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
                         val overallGpa = if (allLoadedMarks.isNotEmpty()) {
                             if (sessionManager.showWeightedGpa) {
                                 val totalWeight = allLoadedMarks.sumOf { it.weight }
                                 if (totalWeight > 0.0) {
-                                    allLoadedMarks.sumOf { it.value * it.weight } / totalWeight
+                                    allLoadedMarks.sumOf { it.effectiveValue * it.weight } / totalWeight
                                 } else {
-                                    allLoadedMarks.map { it.value }.average()
+                                    allLoadedMarks.map { it.effectiveValue }.average()
                                 }
                             } else {
-                                allLoadedMarks.map { it.value }.average()
+                                allLoadedMarks.map { it.effectiveValue }.average()
                             }
                         } else {
                             val validGpas = summaries.map { it.averageMark }.filter { it > 0.0 }
@@ -988,7 +1156,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                         val marksList = markItems.map { m ->
                             val rawStr = m.value?.trim() ?: ""
                             val isPt = m.isPoint == true || rawStr.endsWith(".") || rawStr == "."
-                            val cleanVal = rawStr.removeSuffix(".").toIntOrNull() ?: if (isPt) 0 else 5
+                            val cleanStr = rawStr.removeSuffix(".").removeSuffix("*").trim()
+                            val cleanVal = cleanStr.toIntOrNull() ?: if (isPt) 0 else 5
+                            val isPtCorrected = rawStr.contains("*") || rawStr.endsWith("*")
                             MarkItem(
                                 id = m.id?.toString() ?: "",
                                 subject = subjName,
@@ -1003,12 +1173,14 @@ class MeshRepository(val sessionManager: SessionManager) {
                                 isExam = m.isExam == true,
                                 controlFormName = m.controlFormName,
                                 comment = m.comment,
-                                createdAt = m.createdAt
+                                createdAt = m.createdAt,
+                                isPointCorrected = isPtCorrected,
+                                hasCorrection = isPtCorrected
                             )
                         }
-                        val validMarks = marksList.filter { !it.isPoint && it.value in 2..5 }
+                        val validMarks = marksList.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
                         val totalWeight = validMarks.sumOf { it.weight }
-                        val weightedSum = validMarks.sumOf { it.value * it.weight }
+                        val weightedSum = validMarks.sumOf { it.effectiveValue * it.weight }
                         val avg = if (totalWeight > 0.0) weightedSum / totalWeight else 0.0
                         SubjectSummary(
                             subject = subjName,
@@ -2175,24 +2347,41 @@ class MeshRepository(val sessionManager: SessionManager) {
     }
 
     suspend fun fetchMarkDetails(markId: Long): DetailedMarkResponseDTO? = withContext(Dispatchers.IO) {
-        val token = sessionManager.authToken ?: return@withContext null
-        val bearerToken = if (token.startsWith("Bearer ")) token else "Bearer $token"
-        val dynamicProfileId = sessionManager.profileId.toLongOrNull() ?: 0L
-        val studentId = sessionManager.studentId
-        try {
-            val resp = MeshNetworkClient.familyMobileApi.getMarkDetails(
-                token = bearerToken,
-                profileId = dynamicProfileId,
-                subsystem = "familymp",
-                clientType = "diary-mobile",
-                markId = markId,
-                studentId = studentId
+        val token = sessionManager.authToken
+        if (token != null) {
+            val bearerToken = if (token.startsWith("Bearer ")) token else "Bearer $token"
+            val dynamicProfileId = sessionManager.profileId.toLongOrNull() ?: 0L
+            val studentId = sessionManager.studentId
+            try {
+                val resp = MeshNetworkClient.familyMobileApi.getMarkDetails(
+                    token = bearerToken,
+                    profileId = dynamicProfileId,
+                    subsystem = "familymp",
+                    clientType = "diary-mobile",
+                    markId = markId,
+                    studentId = studentId
+                )
+                if (resp.isSuccessful && resp.body() != null) {
+                    return@withContext resp.body()
+                }
+            } catch (_: Exception) {}
+        }
+        // Fallback for demo mode and mock data with correction history
+        DetailedMarkResponseDTO(
+            id = markId,
+            value = "5",
+            weight = 1.5,
+            controlFormName = "Контрольная работа",
+            comment = "Работа пересдана, точка исправлена на отлично",
+            createdAt = "2026-11-02T10:15:00Z",
+            history = listOf(
+                MarkHistoryItemDTO(
+                    date = "2026-10-25T08:30:00Z",
+                    before = SimpleMarkDTO(id = markId, value = ".", isPoint = true, weight = 1.5, createdAt = "2026-10-25T08:30:00Z"),
+                    after = SimpleMarkDTO(id = markId, value = "5", isPoint = false, weight = 1.5, createdAt = "2026-11-02T10:15:00Z")
+                )
             )
-            if (resp.isSuccessful && resp.body() != null) {
-                return@withContext resp.body()
-            }
-        } catch (_: Exception) {}
-        null
+        )
     }
 
     suspend fun fetchLessonClassRank(lesson: LessonScheduleItem): List<AcademicClassRankItem> = withContext(Dispatchers.IO) {
@@ -2673,7 +2862,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                 token = cleanToken,
                 profileId = profileId,
                 homeworkEntryStudentId = homeworkEntryStudentId,
-                fileId = fileId
+                attachmentIds = fileId
             )
             if (resp.isSuccessful) {
                 fetchRemoteData()

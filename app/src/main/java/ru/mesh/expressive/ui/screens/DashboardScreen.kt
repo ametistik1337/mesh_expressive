@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.sp
 import ru.mesh.expressive.data.model.*
 import ru.mesh.expressive.ui.components.ExpressiveChipSegmentedToggle
 import ru.mesh.expressive.ui.components.ExpressivePullToRefreshBox
-import ru.mesh.expressive.ui.components.M3WavyProgressIndicator
 import ru.mesh.expressive.ui.components.expressiveBounceClick
 import ru.mesh.expressive.ui.theme.*
 import ru.mesh.expressive.ui.viewmodel.DashboardDay
@@ -305,21 +304,11 @@ fun DashboardScreen(
                                 .height(22.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
-                            if (activeGpa > 0.0) {
-                                M3WavyProgressIndicator(
-                                    progress = (activeGpa / 5.0).toFloat().coerceIn(0f, 1f),
-                                    color = ScoreGreen,
-                                    strokeWidth = 3.5.dp,
-                                    amplitude = 2.5f,
-                                    wavelength = 36f
-                                )
-                            } else {
-                                Text(
-                                    text = "Оценок пока нет",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Text(
+                                text = if (activeGpa > 0.0) "Текущий период" else "Оценок пока нет",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -374,18 +363,11 @@ fun DashboardScreen(
                                 .height(22.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
-                            Surface(
-                                shape = PillShape,
-                                color = MoskvionokBlueContainer.copy(alpha = 0.6f)
-                            ) {
-                                Text(
-                                    text = if (meals.hotMealSubscribed) "Горячее питание" else "Буфет",
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MoskvionokBlue
-                                )
-                            }
+                            Text(
+                                text = if (meals.hotMealSubscribed) "Горячее питание" else "Баланс счёта",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }

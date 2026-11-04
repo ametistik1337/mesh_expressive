@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,14 +24,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ru.mesh.expressive.data.model.MarkItem
+import ru.mesh.expressive.data.model.StudyPeriodOption
+import ru.mesh.expressive.data.model.SubjectPeriodInfo
 import ru.mesh.expressive.data.model.SubjectSummary
 import ru.mesh.expressive.ui.components.ExpressiveChipSegmentedToggle
+import ru.mesh.expressive.ui.components.ExpressiveMarkPlaque
 import ru.mesh.expressive.ui.components.ExpressivePullToRefreshBox
-import ru.mesh.expressive.ui.components.M3WavyProgressIndicator
+import ru.mesh.expressive.ui.components.M3ConnectedButtonGroup
 import ru.mesh.expressive.ui.components.expressiveBounceClick
 import ru.mesh.expressive.ui.theme.*
 import ru.mesh.expressive.ui.viewmodel.MarksViewMode
@@ -48,35 +54,149 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
 
     val periodsSchedules by viewModel.periodsSchedules.collectAsState()
 
-    // Находим актуальную четверть/период из расписания периодов или дефолтное название
-    val currentPeriodTitle = remember(periodsSchedules) {
+    // 1. Вычисляем список учебных периодов (четвертей/семестров) из API с автоопределением активного
+    val studyPeriods = remember(periodsSchedules) {
         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-        val found = periodsSchedules.firstOrNull { it.date == today && !it.title.isNullOrBlank() }
-            ?: periodsSchedules.firstOrNull { !it.title.isNullOrBlank() }
-        found?.title ?: "1-я четверть 2026/2027 учебного года"
+        val groups = mutableMapOf<String, MutableList<String>>()
+        periodsSchedules.forEach { item ->
+            val t = item.title.trim()
+            if (t.contains("четверть", ignoreCase = true) ||
+                t.contains("семестр", ignoreCase = true) ||
+                t.contains("триместр", ignoreCase = true)) {
+                groups.getOrPut(t) { mutableListOf() }.add(item.date)
+            }
+        }
+        val list = if (groups.isEmpty()) {
+            listOf(
+                StudyPeriodOption("1", "1 четверть", "1 четв.", "2026-09-01", "2026-10-23", false),
+                StudyPeriodOption("2", "2 четверть", "2 четв.", "2026-11-04", "2026-12-30", true),
+                StudyPeriodOption("3", "3 четверть", "3 четв.", "2027-01-11", "2027-03-12", false),
+                StudyPeriodOption("4", "4 четверть", "4 четв.", "2027-03-22", "2027-05-31", false)
+            )
+        } else {
+            val sorted = groups.map { (title, dates) ->
+                val start = dates.minOrNull() ?: ""
+                val end = dates.maxOrNull() ?: ""
+                val isCur = today in start..end
+                val shortT = title.replace(" четверть", " четв.").replace(" семестр", " сем.").replace(" триместр", " трим.")
+                StudyPeriodOption(
+                    id = title,
+                    title = title,
+                    shortTitle = shortT,
+                    startDate = start,
+                    endDate = end,
+                    isCurrent = isCur
+                )
+            }.sortedBy { it.startDate }
+
+            val hasCurrent = sorted.any { it.isCurrent }
+            if (!hasCurrent && sorted.isNotEmpty()) {
+                val nextOrLast = sorted.firstOrNull { it.startDate > today } ?: sorted.last()
+                sorted.map { if (it.id == nextOrLast.id) it.copy(isCurrent = true) else it }
+            } else {
+                sorted
+            }
+        }
+        list
     }
 
-    // Все оценки, сгруппированные по датам
-    val allMarksGroupedByDate = remember(subjectSummaries) {
-        subjectSummaries.flatMap { it.marks }
+    val allPeriodsOption = remember {
+        StudyPeriodOption(id = "all", title = "Все четверти", shortTitle = "Все", startDate = "", endDate = "", isCurrent = false)
+    }
+
+    val periodOptions = remember(studyPeriods) {
+        studyPeriods + allPeriodsOption
+    }
+
+    val todayDateStr = remember {
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+    }
+    val latestCompletedPeriod = remember(studyPeriods, todayDateStr) {
+        studyPeriods.filter { it.endDate.isNotBlank() && it.endDate < todayDateStr }.maxByOrNull { it.endDate }
+    }
+
+    // Автоопределение активного периода при запуске или загрузке расписания:
+    // если текущая четверть еще не началась или в ней 0 оценок, открываем последнюю завершенную с оценками
+    var selectedPeriod by remember(studyPeriods, subjectSummaries) {
+        val current = studyPeriods.firstOrNull { it.isCurrent }
+        val currentHasMarks = current != null && subjectSummaries.any { subj ->
+            subj.marks.any { m ->
+                val d = m.date.substringBefore("T").trim()
+                d in current.startDate..current.endDate
+            }
+        }
+        val initial = if (current != null && currentHasMarks) {
+            current
+        } else {
+            latestCompletedPeriod ?: current ?: studyPeriods.firstOrNull() ?: allPeriodsOption
+        }
+        mutableStateOf(initial)
+    }
+
+    // Фильтрация предметов и пересчет среднего балла и итоговых оценок под выбранный период
+    val displaySubjectSummaries = remember(subjectSummaries, selectedPeriod, showWeightedGpa) {
+        val today = todayDateStr
+
+        if (selectedPeriod.id == "all") {
+            subjectSummaries
+        } else {
+            subjectSummaries.map { subj ->
+                val matchingPeriod = subj.periods.firstOrNull { p ->
+                    p.title.contains(selectedPeriod.title, ignoreCase = true) ||
+                    selectedPeriod.title.contains(p.title, ignoreCase = true)
+                }
+
+                val periodMarks = subj.marks.filter { m ->
+                    val mDate = m.date.substringBefore("T").trim()
+                    mDate.isNotBlank() && mDate in selectedPeriod.startDate..selectedPeriod.endDate
+                }
+
+                val periodAvg = matchingPeriod?.average?.takeIf { it > 0.0 }
+                    ?: if (periodMarks.isNotEmpty()) {
+                        val valid = periodMarks.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
+                        if (valid.isNotEmpty()) {
+                            if (showWeightedGpa) {
+                                val wSum = valid.sumOf { it.effectiveValue * it.weight }
+                                val wTotal = valid.sumOf { it.weight }
+                                if (wTotal > 0.0) wSum / wTotal else 0.0
+                            } else {
+                                valid.map { it.effectiveValue }.average()
+                            }
+                        } else 0.0
+                    } else 0.0
+
+                // Финальная аттестационная оценка:
+                // 1) Из конкретного периода в API (matchingPeriod.fixedValue)
+                // 2) Либо, если periods не возвращены API, финальная оценка принадлежит последней завершенной четверти
+                val isCompletedPeriod = selectedPeriod.endDate.isNotBlank() && selectedPeriod.endDate < today
+                val periodFinalMark = matchingPeriod?.fixedValue
+                    ?: if (isCompletedPeriod && (latestCompletedPeriod == null || selectedPeriod.id == latestCompletedPeriod.id)) {
+                        subj.finalMark
+                    } else null
+
+                subj.copy(
+                    averageMark = periodAvg,
+                    finalMark = periodFinalMark,
+                    marks = periodMarks
+                )
+            }
+        }
+    }
+
+    // Все оценки текущего выбранного периода, сгруппированные по датам
+    val allMarksGroupedByDate = remember(displaySubjectSummaries) {
+        displaySubjectSummaries.flatMap { it.marks }
             .groupBy { it.date }
             .toList()
             .sortedByDescending { it.first }
     }
 
-    // Оценки, которые можно исправить в будущем (точки с актуальным сроком сдачи сегодня или позже)
-    val fixableMarks = remember(subjectSummaries) {
-        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-        subjectSummaries.flatMap { it.marks }
+    // Оценки, требующие исправления (только активные точки с неистекшим сроком сдачи)
+    val fixableMarks = remember(displaySubjectSummaries) {
+        displaySubjectSummaries.flatMap { it.marks }
             .filter { mark ->
                 val hasPoint = mark.isPoint || !mark.pointDate.isNullOrBlank() || mark.rawValue.endsWith(".") || mark.rawValue == "."
-                if (!hasPoint) return@filter false
-                val pDate = mark.pointDate?.substringBefore("T")?.trim()
-                if (pDate.isNullOrBlank()) {
-                    true
-                } else {
-                    pDate >= todayStr
-                }
+                hasPoint && !mark.isPointExpired
             }
             .distinctBy { if (it.id.isNotBlank()) it.id else "${it.subject}_${it.date}_${it.value}" }
             .sortedWith(
@@ -85,8 +205,42 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
             )
     }
 
-    val gpaLabel = if (showWeightedGpa) "Средневзвешенный балл" else "Средний балл (арифм.)"
     val activeGpa by viewModel.activeGpa.collectAsState()
+    val displayGpa = remember(displaySubjectSummaries, showWeightedGpa, activeGpa, selectedPeriod) {
+        if (selectedPeriod.id == "all") {
+            activeGpa
+        } else {
+            val allMarks = displaySubjectSummaries.flatMap { it.marks }
+                .filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
+            if (allMarks.isNotEmpty()) {
+                if (showWeightedGpa) {
+                    val wTotal = allMarks.sumOf { it.weight }
+                    if (wTotal > 0.0) allMarks.sumOf { it.effectiveValue * it.weight } / wTotal else 0.0
+                } else {
+                    allMarks.map { it.effectiveValue }.average()
+                }
+            } else {
+                val nonZeroAverages = displaySubjectSummaries.map { it.averageMark }.filter { it > 0.0 }
+                if (nonZeroAverages.isNotEmpty()) nonZeroAverages.average() else 0.0
+            }
+        }
+    }
+
+    val periodSubtitle = remember(selectedPeriod) {
+        if (selectedPeriod.id == "all") {
+            "Все учебные периоды 2026/2027 учебного года"
+        } else {
+            val startFormatted = ru.mesh.expressive.util.DateUtils.formatPointDate(selectedPeriod.startDate)
+            val endFormatted = ru.mesh.expressive.util.DateUtils.formatPointDate(selectedPeriod.endDate)
+            if (startFormatted.isNotBlank() && endFormatted.isNotBlank()) {
+                "${selectedPeriod.title} ($startFormatted — $endFormatted)"
+            } else {
+                selectedPeriod.title
+            }
+        }
+    }
+
+    val gpaLabel = if (showWeightedGpa) "Средневзвешенный балл" else "Средний балл (арифм.)"
 
     ExpressivePullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -102,8 +256,8 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(top = 16.dp, bottom = 120.dp)
             ) {
-                // 1. GPA Hero Card
-                item {
+                // 1. GPA Hero Card (динамический средний балл за выбранный период)
+                item(key = "gpa_hero_card") {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = ExpressiveHeroShape,
@@ -124,7 +278,7 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                     )
                                     Text(
-                                        text = if (activeGpa > 0.0) "Средний балл: ${String.format(java.util.Locale.US, "%.2f", activeGpa)}" else "Средний балл: —",
+                                        text = if (displayGpa > 0.0) "Средний балл: ${String.format(java.util.Locale.US, "%.2f", displayGpa)}" else "Средний балл: —",
                                         style = MaterialTheme.typography.headlineMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -132,21 +286,10 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            if (activeGpa > 0.0) {
-                                M3WavyProgressIndicator(
-                                    progress = (activeGpa / 5.0).toFloat().coerceIn(0f, 1f),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    amplitude = 4f,
-                                    wavelength = 32f
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
+                            Spacer(modifier = Modifier.height(10.dp))
 
                             Text(
-                                text = currentPeriodTitle,
+                                text = periodSubtitle,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                             )
@@ -154,8 +297,17 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                     }
                 }
 
-                // 2. Mode Header with Segmented Selector (Предметы / Даты)
-                item {
+                // 2. Плашка выбора четверти / семестра (Material 3 Expressive Chips с автоопределением)
+                item(key = "study_period_selector") {
+                    StudyPeriodSelectorRow(
+                        periods = periodOptions,
+                        selectedPeriod = selectedPeriod,
+                        onPeriodSelected = { selectedPeriod = it }
+                    )
+                }
+
+                // 3. Mode Header with Segmented Selector (Предметы / Даты)
+                item(key = "mode_header") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -168,7 +320,7 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (viewMode == MarksViewMode.BY_SUBJECT) "${subjectSummaries.size} предметов" else "${allMarksGroupedByDate.sumOf { it.second.size }} оценок",
+                                text = if (viewMode == MarksViewMode.BY_SUBJECT) "${displaySubjectSummaries.size} предметов" else "${allMarksGroupedByDate.sumOf { it.second.size }} оценок",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1
@@ -188,18 +340,18 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                     }
                 }
 
-                // 3. Content by Mode
-                if (subjectSummaries.isEmpty()) {
+                // 4. Content by Mode
+                if (displaySubjectSummaries.isEmpty()) {
                     item(key = "marks_empty") {
                         ru.mesh.expressive.ui.components.ExpressiveEmptyState(
                             title = "Здесь ничего нет",
-                            subtitle = "В текущем учебном периоде выставленных оценок нет",
+                            subtitle = "В выбранном учебном периоде выставленных оценок нет",
                             icon = Icons.Default.Inbox
                         )
                     }
                 } else if (viewMode == MarksViewMode.BY_SUBJECT) {
                     items(
-                        items = subjectSummaries,
+                        items = displaySubjectSummaries,
                         key = { "${it.subjectId}_${it.subject}" },
                         contentType = { "subject" }
                     ) { subject ->
@@ -362,6 +514,29 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
 
 
 
+/**
+ * Селектор учебных периодов (четвертей/семестров)
+ * на базе официальной спецификации Material 3 Connected Button Groups (https://m3.material.io/components/button-groups/overview)
+ */
+@Composable
+fun StudyPeriodSelectorRow(
+    periods: List<StudyPeriodOption>,
+    selectedPeriod: StudyPeriodOption,
+    onPeriodSelected: (StudyPeriodOption) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    M3ConnectedButtonGroup(
+        items = periods,
+        selectedItem = selectedPeriod,
+        onItemSelected = onPeriodSelected,
+        label = { it.title },
+        showCheckmark = true,
+        showIndicatorDot = { it.isCurrent },
+        scrollable = true,
+        modifier = modifier
+    )
+}
+
 @Composable
 fun FixableMarksGroupCard(
     fixableMarks: List<MarkItem>,
@@ -379,10 +554,6 @@ fun FixableMarksGroupCard(
     val itemBg = if (isDark) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface
     val redContent = if (isDark) Color(0xFFFF7C83) else Color(0xFFC62828)
     val redPillBg = if (isDark) Color(0xFFE94255).copy(alpha = 0.22f) else Color(0xFFFFEBEE)
-    val pointBadgeBg = if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0)
-    val pointBadgeBorder = if (isDark) Color(0xFFFB843D).copy(alpha = 0.35f) else Color(0xFFFFCC80)
-    val pointTextColor = if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
-    val dotColor = if (isDark) Color(0xFFFF5252) else Color(0xFFD32F2F)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -453,19 +624,18 @@ fun FixableMarksGroupCard(
                     fixableMarks.forEach { mark ->
                         val formattedPointDate = if (!mark.pointDate.isNullOrBlank()) ru.mesh.expressive.util.DateUtils.formatPointDate(mark.pointDate) else null
                         val markRelativeDate = ru.mesh.expressive.util.DateUtils.formatRelativeDate(mark.date)
-                        val markDisplayVal = if (mark.value > 0) "${mark.value}" else "•"
 
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(itemBg)
                                 .then(if (onMarkClick != null) Modifier.clickable { onMarkClick(mark) } else Modifier)
                                 .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
                                 Text(
                                     text = mark.subject,
                                     style = MaterialTheme.typography.bodyLarge,
@@ -476,41 +646,47 @@ fun FixableMarksGroupCard(
                                     Text(
                                         text = mark.topic,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val pointBadgeBg = if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0)
+                                    val pointBadgeFg = if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
+                                    val pointBadgeText = if (!formattedPointDate.isNullOrBlank()) "Точка до $formattedPointDate" else "Точка"
                                     Surface(
                                         shape = PillShape,
-                                        color = redPillBg
+                                        color = pointBadgeBg
                                     ) {
                                         Text(
-                                            text = if (!formattedPointDate.isNullOrBlank()) "Точка до $formattedPointDate" else "Точка",
+                                            text = pointBadgeText,
                                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = redContent
+                                            color = pointBadgeFg
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "за $markRelativeDate",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    if (markRelativeDate.isNotBlank()) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = markRelativeDate,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (mark.weight > 1.0) {
+                                if (mark.weight > 1.0 && mark.weight != 2.0) {
                                     Surface(
                                         shape = PillShape,
                                         color = MaterialTheme.colorScheme.tertiaryContainer,
                                         modifier = Modifier.padding(end = 8.dp)
                                     ) {
                                         Text(
-                                            text = "Вес ${mark.weight}",
+                                            text = "×${mark.weight}",
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
@@ -519,29 +695,13 @@ fun FixableMarksGroupCard(
                                     }
                                 }
 
-                                Surface(
-                                    modifier = Modifier.size(38.dp),
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = pointBadgeBg,
-                                    border = BorderStroke(1.dp, pointBadgeBorder)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = markDisplayVal,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 17.sp,
-                                            color = pointTextColor
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(top = 4.dp, end = 4.dp)
-                                                .size(6.dp)
-                                                .clip(CircleShape)
-                                                .background(dotColor)
-                                        )
-                                    }
-                                }
+                                ExpressiveMarkPlaque(
+                                    mark = mark,
+                                    size = 40.dp,
+                                    fontSize = 16.sp,
+                                    cornerRadius = 12.dp,
+                                    onClick = if (onMarkClick != null) { { onMarkClick(mark) } } else null
+                                )
                             }
                         }
                     }
@@ -602,60 +762,94 @@ fun DateMarksGroupCard(
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 marks.forEach { mark ->
+                    val isPoint = mark.isPoint || !mark.pointDate.isNullOrBlank() || mark.rawValue.endsWith(".") || mark.rawValue == "."
+                    val isExpired = mark.isPointExpired
+                    val formattedPointDate = if (isPoint && !mark.pointDate.isNullOrBlank()) ru.mesh.expressive.util.DateUtils.formatPointDate(mark.pointDate) else null
+                    val isDark = isSystemInDarkTheme()
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(MaterialTheme.colorScheme.surfaceContainer)
                             .then(if (onMarkClick != null) Modifier.clickable { onMarkClick(mark) } else Modifier)
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        val isPoint = mark.isPoint || !mark.pointDate.isNullOrBlank() || mark.rawValue.endsWith(".") || mark.rawValue == "."
-                        val formattedPointDate = if (isPoint && !mark.pointDate.isNullOrBlank()) ru.mesh.expressive.util.DateUtils.formatPointDate(mark.pointDate) else null
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = mark.subject,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
-                            )
+                        Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = mark.subject,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (mark.isExam) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = PillShape,
+                                        color = MaterialTheme.colorScheme.errorContainer
+                                    ) {
+                                        Text(
+                                            text = "КР",
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
                             if (mark.topic.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = mark.topic,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2
                                 )
                             }
                             if (isPoint) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                val redPillBg = if (isSystemInDarkTheme()) Color(0xFFE94255).copy(alpha = 0.22f) else Color(0xFFFFEBEE)
-                                val redContent = if (isSystemInDarkTheme()) Color(0xFFFF7C83) else Color(0xFFC62828)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                val badgeBg = if (isExpired) {
+                                    if (isDark) Color(0xFF3E1E22) else Color(0xFFFFEBEE)
+                                } else {
+                                    if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0)
+                                }
+                                val badgeFg = if (isExpired) {
+                                    if (isDark) Color(0xFFFF7C83) else Color(0xFFC62828)
+                                } else {
+                                    if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
+                                }
+                                val badgeText = when {
+                                    isExpired -> "Точка истекла"
+                                    !formattedPointDate.isNullOrBlank() -> "Точка до $formattedPointDate"
+                                    else -> "Точка"
+                                }
                                 Surface(
                                     shape = PillShape,
-                                    color = redPillBg
+                                    color = badgeBg
                                 ) {
                                     Text(
-                                        text = if (!formattedPointDate.isNullOrBlank()) "Точка до $formattedPointDate" else "Точка",
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                        text = badgeText,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = redContent
+                                        color = badgeFg
                                     )
                                 }
                             }
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (mark.weight > 1.0) {
+                            if (mark.weight > 1.0 && mark.weight != 2.0) {
                                 Surface(
                                     shape = PillShape,
                                     color = MaterialTheme.colorScheme.tertiaryContainer,
                                     modifier = Modifier.padding(end = 8.dp)
                                 ) {
                                     Text(
-                                        text = "Вес ${mark.weight}",
+                                        text = "×${mark.weight}",
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.SemiBold,
@@ -664,48 +858,38 @@ fun DateMarksGroupCard(
                                 }
                             }
 
-                            val isDark = isSystemInDarkTheme()
-                            val (bgColor, textColor) = when {
-                                isPoint -> (if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0)) to (if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100))
-                                mark.value == 5 -> (if (isDark) ScoreGreenContainerDark else ScoreGreenContainerLight) to (if (isDark) ScoreGreenDark else ScoreGreenLight)
-                                mark.value == 4 -> (if (isDark) ScoreBlueContainerDark else ScoreBlueContainerLight) to (if (isDark) ScoreBlueDark else ScoreBlueLight)
-                                mark.value == 3 -> (if (isDark) ScoreOrangeContainerDark else ScoreOrangeContainerLight) to (if (isDark) ScoreOrangeDark else ScoreOrangeLight)
-                                else -> (if (isDark) ScoreRedContainerDark else ScoreRedContainerLight) to (if (isDark) ScoreRedDark else ScoreRedLight)
-                            }
-
-                            val pointBorder = if (isPoint) BorderStroke(1.dp, if (isDark) Color(0xFFFB843D).copy(alpha = 0.35f) else Color(0xFFFFCC80)) else null
-                            val markDisplayVal = if (isPoint) (if (mark.value > 0) "${mark.value}" else "•") else "${mark.value}"
-
-                            Surface(
-                                modifier = Modifier.size(36.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                color = bgColor,
-                                border = pointBorder
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = markDisplayVal,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp,
-                                        color = textColor
-                                    )
-                                    if (isPoint) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(top = 3.dp, end = 3.dp)
-                                                .size(5.5.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isDark) Color(0xFFFF5252) else Color(0xFFD32F2F))
-                                        )
-                                    }
-                                }
-                            }
+                            // Expressive M3 Plaque с пружинным откликом и суперскриптом веса
+                            ExpressiveMarkPlaque(
+                                mark = mark,
+                                size = 40.dp,
+                                fontSize = 16.sp,
+                                cornerRadius = 12.dp,
+                                onClick = if (onMarkClick != null) { { onMarkClick(mark) } } else null
+                            )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+fun getAttestationColors(value: String?, isDark: Boolean): Pair<Color, Color> {
+    val clean = value?.trim()?.uppercase() ?: return (Color.Transparent to Color.Unspecified)
+    val num = clean.toIntOrNull()
+    return when {
+        clean in listOf("5", "А", "З", "ЗАЧЕТ", "ЗАЧТЕНО", "АТТЕСТОВАН", "АТТ") || (num != null && num >= 5) ->
+            (if (isDark) ScoreGreenContainerDark else ScoreGreenContainerLight) to (if (isDark) ScoreGreenDark else ScoreGreenLight)
+        clean == "4" || (num == 4) ->
+            (if (isDark) ScoreBlueContainerDark else ScoreBlueContainerLight) to (if (isDark) ScoreBlueDark else ScoreBlueLight)
+        clean == "3" || (num == 3) ->
+            (if (isDark) ScoreOrangeContainerDark else ScoreOrangeContainerLight) to (if (isDark) ScoreOrangeDark else ScoreOrangeLight)
+        clean in listOf("2", "1", "Н/А", "Н/З", "НЕАТТЕСТОВАН", "НЕЗАЧЕТ", "НЕ АТТЕСТОВАН", "НЕ ЗАЧТЕНО") || (num != null && num <= 2) ->
+            (if (isDark) ScoreRedContainerDark else ScoreRedContainerLight) to (if (isDark) ScoreRedDark else ScoreRedLight)
+        clean in listOf("ОСВ", "ОСВОБОЖДЕН", "ОСВОБОЖДЕНА", "ОСВ.") ->
+            (if (isDark) Color(0xFF33383F) else Color(0xFFE0E3E8)) to (if (isDark) Color(0xFFB0B8C4) else Color(0xFF5A606A))
+        else ->
+            (if (isDark) ScoreBlueContainerDark else ScoreBlueContainerLight) to (if (isDark) ScoreBlueDark else ScoreBlueLight)
     }
 }
 
@@ -719,22 +903,28 @@ fun SubjectMarksCard(
     var isExpanded by remember { mutableStateOf(false) }
 
     val effAvg = subjectSummary.getEffectiveAverage(showWeightedGpa)
+    val hasFinalMark = !subjectSummary.finalMark.isNullOrBlank()
+    val finalVal = subjectSummary.finalMark.orEmpty()
+
+    val isDark = isSystemInDarkTheme()
 
     val markColor = when {
         effAvg <= 0.0 -> MaterialTheme.colorScheme.onSurfaceVariant
-        effAvg >= 4.5 -> ScoreGreen
-        effAvg >= 3.6 -> ScoreBlue
-        effAvg >= 2.7 -> ScoreOrange
-        else -> ScoreRed
+        effAvg >= 4.5 -> if (isDark) ScoreGreenDark else ScoreGreenLight
+        effAvg >= 3.6 -> if (isDark) ScoreBlueDark else ScoreBlueLight
+        effAvg >= 2.7 -> if (isDark) ScoreOrangeDark else ScoreOrangeLight
+        else -> if (isDark) ScoreRedDark else ScoreRedLight
     }
 
     val markBgColor = when {
         effAvg <= 0.0 -> MaterialTheme.colorScheme.surfaceVariant
-        effAvg >= 4.5 -> ScoreGreenContainer
-        effAvg >= 3.6 -> ScoreBlueContainer
-        effAvg >= 2.7 -> ScoreOrangeContainer
-        else -> ScoreRedContainer
+        effAvg >= 4.5 -> if (isDark) ScoreGreenContainerDark else ScoreGreenContainerLight
+        effAvg >= 3.6 -> if (isDark) ScoreBlueContainerDark else ScoreBlueContainerLight
+        effAvg >= 2.7 -> if (isDark) ScoreOrangeContainerDark else ScoreOrangeContainerLight
+        else -> if (isDark) ScoreRedContainerDark else ScoreRedContainerLight
     }
+
+    val (finalBgColor, finalFgColor) = getAttestationColors(finalVal, isDark)
 
     Card(
         modifier = Modifier
@@ -751,33 +941,84 @@ fun SubjectMarksCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                     Text(
                         text = subjectSummary.subject,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    val predictedMark = if (effAvg >= 4.60) 5 else if (effAvg >= 3.60) 4 else if (effAvg >= 2.60) 3 else 2
+                    val subtitleText = when {
+                        hasFinalMark -> "${subjectSummary.marks.size} оценок • Четвертная оценка выставлена"
+                        effAvg > 0.0 -> "${subjectSummary.marks.size} оценок • Прогноз: $predictedMark"
+                        else -> "Оценок пока нет"
+                    }
                     Text(
-                        text = "${subjectSummary.marks.size} оценок в четверти",
+                        text = subtitleText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = PillShape,
-                        color = markBgColor,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Text(
-                            text = if (effAvg > 0.0) String.format(java.util.Locale.US, "%.2f", effAvg) else "—",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = markColor
-                        )
+                    if (hasFinalMark) {
+                        // Механика итоговой аттестационной оценки с иконкой Verified
+                        Surface(
+                            shape = PillShape,
+                            color = finalBgColor,
+                            modifier = Modifier.padding(end = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Verified,
+                                    contentDescription = null,
+                                    tint = finalFgColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Итог: $finalVal",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = finalFgColor
+                                )
+                            }
+                        }
+
+                        if (effAvg > 0.0) {
+                            Surface(
+                                shape = PillShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%.2f", effAvg),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        // Текущий средний балл
+                        Surface(
+                            shape = PillShape,
+                            color = markBgColor,
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Text(
+                                text = if (effAvg > 0.0) String.format(java.util.Locale.US, "%.2f", effAvg) else "—",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = markColor
+                            )
+                        }
                     }
 
                     Icon(
@@ -792,6 +1033,65 @@ fun SubjectMarksCard(
                 Column(modifier = Modifier.padding(top = 16.dp)) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(12.dp))
+
+                    // Сводная плашка четвертных аттестаций (если есть данные периодов)
+                    if (subjectSummary.periods.isNotEmpty()) {
+                        Text(
+                            text = "Итоговые отметки по периодам",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            subjectSummary.periods.forEach { p ->
+                                val pHasFixed = !p.fixedValue.isNullOrBlank()
+                                val pVal = p.fixedValue.orEmpty()
+                                val (pBg, pFg) = when {
+                                    pHasFixed -> getAttestationColors(pVal, isDark)
+                                    p.average > 0.0 -> MaterialTheme.colorScheme.surfaceContainerHigh to MaterialTheme.colorScheme.onSurface
+                                    else -> MaterialTheme.colorScheme.surfaceContainerLowest to MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                }
+                                Surface(
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = pBg
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        val pShortTitle = p.title.replace(" четверть", " ч.").replace(" семестр", " сем.")
+                                        Text(
+                                            text = pShortTitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = if (pHasFixed) "$pVal" else if (p.average > 0.0) String.format(java.util.Locale.US, "%.2f", p.average) else "—",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = pFg
+                                        )
+                                        if (pHasFixed) {
+                                            Text(
+                                                text = "итог",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 9.sp,
+                                                color = pFg.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -827,7 +1127,7 @@ fun SubjectMarksCard(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(12.dp))
                                     .background(MaterialTheme.colorScheme.surfaceContainer)
                                     .then(if (onMarkClick != null) Modifier.clickable { onMarkClick(mark) } else Modifier)
                                     .padding(10.dp),
@@ -835,32 +1135,39 @@ fun SubjectMarksCard(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 val isPoint = mark.isPoint || !mark.pointDate.isNullOrBlank() || mark.rawValue.endsWith(".") || mark.rawValue == "."
+                                val isExpired = mark.isPointExpired
                                 val formattedPointDate = if (isPoint && !mark.pointDate.isNullOrBlank()) ru.mesh.expressive.util.DateUtils.formatPointDate(mark.pointDate) else null
 
-                                val isDark = isSystemInDarkTheme()
                                 val redPillBg = if (isDark) Color(0xFFE94255).copy(alpha = 0.22f) else Color(0xFFFFEBEE)
                                 val redContent = if (isDark) Color(0xFFFF7C83) else Color(0xFFC62828)
 
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                                     Text(
-                                        text = mark.topic,
+                                        text = mark.topic.ifBlank { if (mark.isExam) "Контрольная работа" else "Оценка за урок" },
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Medium
                                     )
                                     val markTimeStr = if (!mark.createdAt.isNullOrBlank()) ru.mesh.expressive.util.DateUtils.formatRelativeDateTime(mark.createdAt) else ru.mesh.expressive.util.DateUtils.formatRelativeDate(mark.date)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         if (isPoint) {
+                                            val ptBg = if (isExpired) redPillBg else (if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0))
+                                            val ptFg = if (isExpired) redContent else (if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100))
+                                            val ptText = when {
+                                                isExpired -> "Точка истекла"
+                                                !formattedPointDate.isNullOrBlank() -> "Точка до $formattedPointDate"
+                                                else -> "Точка"
+                                            }
                                             Surface(
                                                 shape = PillShape,
-                                                color = redPillBg,
+                                                color = ptBg,
                                                 modifier = Modifier.padding(end = 6.dp)
                                             ) {
                                                 Text(
-                                                    text = if (!formattedPointDate.isNullOrBlank()) "Точка до $formattedPointDate" else "Точка",
+                                                    text = ptText,
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = redContent
+                                                    color = ptFg
                                                 )
                                             }
                                         }
@@ -872,42 +1179,13 @@ fun SubjectMarksCard(
                                     }
                                 }
 
-                                val (bg, fg) = when {
-                                    isPoint -> (if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0)) to (if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100))
-                                    mark.value == 5 -> (if (isDark) ScoreGreenContainerDark else ScoreGreenContainerLight) to (if (isDark) ScoreGreenDark else ScoreGreenLight)
-                                    mark.value == 4 -> (if (isDark) ScoreBlueContainerDark else ScoreBlueContainerLight) to (if (isDark) ScoreBlueDark else ScoreBlueLight)
-                                    mark.value == 3 -> (if (isDark) ScoreOrangeContainerDark else ScoreOrangeContainerLight) to (if (isDark) ScoreOrangeDark else ScoreOrangeLight)
-                                    else -> (if (isDark) ScoreRedContainerDark else ScoreRedContainerLight) to (if (isDark) ScoreRedDark else ScoreRedLight)
-                                }
-
-                                val pointBorder = if (isPoint) BorderStroke(1.dp, if (isDark) Color(0xFFFB843D).copy(alpha = 0.35f) else Color(0xFFFFCC80)) else null
-                                val markDisplayVal = if (isPoint) (if (mark.value > 0) "${mark.value}" else "•") else "${mark.value}"
-
-                                Surface(
-                                    modifier = Modifier.size(34.dp),
-                                    shape = RoundedCornerShape(9.dp),
-                                    color = bg,
-                                    border = pointBorder
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = markDisplayVal,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = fg
-                                        )
-                                        if (isPoint) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .align(Alignment.TopEnd)
-                                                    .padding(top = 2.5.dp, end = 2.5.dp)
-                                                    .size(5.dp)
-                                                    .clip(CircleShape)
-                                                    .background(if (isDark) Color(0xFFFF5252) else Color(0xFFD32F2F))
-                                            )
-                                        }
-                                    }
-                                }
+                                ExpressiveMarkPlaque(
+                                    mark = mark,
+                                    size = 36.dp,
+                                    fontSize = 15.sp,
+                                    cornerRadius = 10.dp,
+                                    onClick = if (onMarkClick != null) { { onMarkClick(mark) } } else null
+                                )
                             }
                         }
                     }
@@ -918,11 +1196,13 @@ fun SubjectMarksCard(
 }
 
 private fun calculateNeededFives(subject: SubjectSummary, targetGpa: Float): Int {
-    if (subject.averageMark >= targetGpa) return 0
+    val currentAvg = subject.getEffectiveAverage(true)
+    if (currentAvg >= targetGpa) return 0
 
-    val (weightedSum, totalWeight) = if (subject.marks.isNotEmpty()) {
-        val sum = subject.marks.sumOf { it.value * it.weight }
-        val weight = subject.marks.sumOf { it.weight }
+    val validMarks = subject.marks.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
+    val (weightedSum, totalWeight) = if (validMarks.isNotEmpty()) {
+        val sum = validMarks.sumOf { it.effectiveValue * it.weight }
+        val weight = validMarks.sumOf { it.weight }
         sum to weight
     } else {
         (subject.averageMark * 1.0) to 1.0

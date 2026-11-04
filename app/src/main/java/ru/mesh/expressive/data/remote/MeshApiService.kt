@@ -262,6 +262,23 @@ interface MeshFamilyWebApi {
     ): Response<AttendanceResponseDTO>
 }
 
+data class ProfileInfoItemDTO(
+    @SerializedName("id")
+    val id: Long = 0L,
+    @SerializedName("type")
+    val type: String? = null
+)
+
+interface MeshProfileInfoApi {
+    @GET("api/ej/acl/v1/mod-acl/users/profile_info")
+    suspend fun getProfileInfo(
+        @Header("Authorization") bearerToken: String,
+        @Header("Auth-Token") authToken: String,
+        @Header("Partner-Source-Id") partnerSourceId: String = "MOBILE",
+        @Header("x-mes-subsystem") subsystem: String = "familymp"
+    ): Response<List<ProfileInfoItemDTO>>
+}
+
 interface MeshEmiasApi {
     @GET("api/ej/core/family/v1/emias_medical_recommendations")
     suspend fun getEmiasMedicalRecommendations(
@@ -489,18 +506,21 @@ interface MeshFamilyMobileApi {
         @Header("Authorization") token: String,
         @Header("Profile-Id") profileId: Long,
         @Header("x-mes-subsystem") subsystem: String = "familymp",
+        @Header("client-type") clientType: String = "diary-mobile",
         @Path("homework_entry_student_id") homeworkEntryStudentId: Long,
         @Query("type") lessonType: String = "lesson",
         @Part file: MultipartBody.Part
     ): Response<okhttp3.ResponseBody>
 
-    @DELETE("homeworks/{homework_entry_student_id}/attachment/{file_id}")
+    @DELETE("homeworks/{homework_entry_student_id}/attachment")
     suspend fun deleteHomeworkAttachment(
         @Header("Authorization") token: String,
         @Header("Profile-Id") profileId: Long,
         @Header("x-mes-subsystem") subsystem: String = "familymp",
+        @Header("client-type") clientType: String = "diary-mobile",
         @Path("homework_entry_student_id") homeworkEntryStudentId: Long,
-        @Path("file_id") fileId: Long
+        @Query("attachment_ids") attachmentIds: Long,
+        @Query("type") lessonType: String = "lesson"
     ): Response<okhttp3.ResponseBody>
 }
 
@@ -758,6 +778,15 @@ object MeshNetworkClient {
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(MeshFamilyMobileApi::class.java)
+    }
+
+    val profileInfoApi: MeshProfileInfoApi by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://school.mos.ru/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+            .create(MeshProfileInfoApi::class.java)
     }
 
     val eventCalendarApi: MeshEventCalendarApi by lazy {
