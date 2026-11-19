@@ -172,7 +172,7 @@ fun AttendanceScreen(viewModel: MeshMainViewModel) {
                             modifier = Modifier.weight(1f)
                         )
                         AttendanceStatChip(
-                            title = "Уважительно",
+                            title = "Уваж.",
                             count = "${attendance.excusedAbsences} ур.",
                             color = ScoreGreen,
                             bgColor = ScoreGreenContainer,
@@ -768,13 +768,15 @@ fun AttendanceStatChip(
                 text = title,
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 10.sp,
-                color = color
+                color = color,
+                maxLines = 1
             )
             Text(
                 text = count,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = color
+                color = color,
+                maxLines = 1
             )
         }
     }
