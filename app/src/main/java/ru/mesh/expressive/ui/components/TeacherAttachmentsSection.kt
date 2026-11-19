@@ -145,12 +145,16 @@ fun TeacherAttachmentsSection(
                     } else if (isDownloaded) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
-                                onClick = { viewModel.shareAttachment(context, fileMat.title) },
+                                onClick = {
+                                    if (!fileMat.url.isNullOrBlank()) {
+                                        viewModel.downloadAttachment(context, fileMat.url, fileMat.title, openAfterDownload = false)
+                                    }
+                                },
                                 modifier = Modifier.size(32.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.Share,
-                                    contentDescription = "Поделиться",
+                                    Icons.Default.Download,
+                                    contentDescription = "Скачать",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp)
                                 )

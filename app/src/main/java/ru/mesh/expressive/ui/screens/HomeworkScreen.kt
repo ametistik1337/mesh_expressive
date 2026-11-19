@@ -304,40 +304,6 @@ fun HomeworkScreen(viewModel: MeshMainViewModel) {
                                         }
                                     }
                                 }
-
-                                val totalMatCount = if (hw.teacherFiles.isNotEmpty()) hw.teacherFiles.size else if (hw.materialsCount > 0) hw.materialsCount else hw.attachments.size
-                                if (totalMatCount > 0) {
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Surface(
-                                        shape = PillShape,
-                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.AttachFile,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            val badgeLabel = when {
-                                                totalMatCount == 1 -> "1 материал к ДЗ"
-                                                totalMatCount in 2..4 -> "$totalMatCount материала к ДЗ"
-                                                else -> "$totalMatCount материалов к ДЗ"
-                                            }
-                                            Text(
-                                                text = badgeLabel,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontSize = 10.5.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
