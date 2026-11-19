@@ -86,6 +86,9 @@ fun ExpressiveMarkPlaque(
     val isExpired = mark.isPointExpired
     val effVal = mark.effectiveValue
 
+    val isViewed = mark.rawValue.equals("См", ignoreCase = true) || mark.rawValue.equals("Смотрел", ignoreCase = true)
+    val isPassed = mark.rawValue.equals("З", ignoreCase = true) || mark.rawValue.equals("А", ignoreCase = true)
+
     // Цветовая схема M3 Expressive Tonal Container
     val (bgColor, textColor, borderColor) = when {
         // Просроченная точка: учитывается как 2 в красном контейнере с акцентным бордером
@@ -99,6 +102,18 @@ fun ExpressiveMarkPlaque(
             if (isDark) Color(0xFF2C2218) else Color(0xFFFFF3E0),
             if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100),
             if (isDark) Color(0xFFFB843D).copy(alpha = 0.45f) else Color(0xFFFFCC80)
+        )
+        // "См" (Смотрел / проверено учителем в ЦДЗ)
+        isViewed -> Triple(
+            if (isDark) Color(0xFF1E2836) else Color(0xFFE8F0FE),
+            if (isDark) Color(0xFF8AB4F8) else Color(0xFF1A73E8),
+            null
+        )
+        // Зачет / Аттестован
+        isPassed -> Triple(
+            if (isDark) ScoreGreenContainerDark else ScoreGreenContainerLight,
+            if (isDark) ScoreGreenDark else ScoreGreenLight,
+            null
         )
         // Обычные оценки
         mark.value >= 5 -> Triple(
@@ -116,9 +131,14 @@ fun ExpressiveMarkPlaque(
             if (isDark) ScoreOrangeDark else ScoreOrangeLight,
             null
         )
-        else -> Triple(
+        mark.value in 1..2 -> Triple(
             if (isDark) ScoreRedContainerDark else ScoreRedContainerLight,
             if (isDark) ScoreRedDark else ScoreRedLight,
+            null
+        )
+        else -> Triple(
+            if (isDark) Color(0xFF242424) else Color(0xFFEEEEEE),
+            if (isDark) Color(0xFFCCCCCC) else Color(0xFF555555),
             null
         )
     }
@@ -127,8 +147,16 @@ fun ExpressiveMarkPlaque(
     val displayVal = when {
         isPt && isExpired -> if (effVal > 0) "$effVal" else "2"
         isPt -> if (mark.value > 0) "${mark.value}" else "•"
-        else -> "${mark.value}"
+        isViewed -> "См"
+        isPassed -> mark.rawValue.take(1).uppercase()
+        mark.value in 1..5 -> "${mark.value}"
+        mark.rawValue.isNotBlank() && mark.rawValue != "0" -> mark.rawValue
+        else -> "•"
     }
+
+    val actualFontSize = if (displayVal.length > 2) (fontSize.value * 0.7f).sp
+    else if (displayVal.length > 1) (fontSize.value * 0.85f).sp
+    else fontSize
 
     val weightSuper = if (mark.weight > 1.0) formatWeightSuperscript(mark.weight) else ""
 
@@ -182,7 +210,7 @@ fun ExpressiveMarkPlaque(
                 Text(
                     text = displayVal,
                     fontWeight = FontWeight.Bold,
-                    fontSize = fontSize,
+                    fontSize = actualFontSize,
                     color = textColor,
                     letterSpacing = (-0.5).sp
                 )
@@ -190,7 +218,7 @@ fun ExpressiveMarkPlaque(
                     Text(
                         text = "*",
                         fontWeight = FontWeight.Bold,
-                        fontSize = (fontSize.value * 0.85f).sp,
+                        fontSize = (actualFontSize.value * 0.85f).sp,
                         color = textColor.copy(alpha = 0.9f),
                         modifier = Modifier.padding(start = 0.5.dp)
                     )
@@ -199,7 +227,7 @@ fun ExpressiveMarkPlaque(
                     Text(
                         text = weightSuper,
                         fontWeight = FontWeight.Black,
-                        fontSize = (fontSize.value * 0.95f).sp,
+                        fontSize = (actualFontSize.value * 0.95f).sp,
                         color = textColor.copy(alpha = 0.95f),
                         modifier = Modifier.padding(start = 0.5.dp)
                     )

@@ -28,6 +28,12 @@ enum class MarksViewMode {
     BY_SUBJECT, BY_DATE
 }
 
+enum class RatingPeriodMode(val title: String) {
+    YEAR("За год"),
+    SEMESTER("За полугодие"),
+    MONTH("За месяц")
+}
+
 class MeshMainViewModel(
     val repository: MeshRepository,
     val sessionManager: SessionManager
@@ -80,6 +86,18 @@ class MeshMainViewModel(
     private val _themeMode = MutableStateFlow(sessionManager.themeMode)
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
+    private val _isAmoledDark = MutableStateFlow(sessionManager.isAmoledDark)
+    val isAmoledDark: StateFlow<Boolean> = _isAmoledDark.asStateFlow()
+
+    private val _studyPeriodMode = MutableStateFlow(sessionManager.studyPeriodMode)
+    val studyPeriodMode: StateFlow<String> = _studyPeriodMode.asStateFlow()
+
+    private val _ratingPeriodMode = MutableStateFlow(RatingPeriodMode.YEAR)
+    val ratingPeriodMode: StateFlow<RatingPeriodMode> = _ratingPeriodMode.asStateFlow()
+
+    private val _semesterAcademicRanks = MutableStateFlow<List<AcademicClassRankItem>>(emptyList())
+    val semesterAcademicRanks: StateFlow<List<AcademicClassRankItem>> = _semesterAcademicRanks.asStateFlow()
+
     val studentProfile: StateFlow<StudentProfile> = repository.studentProfile
     val weekSchedule: StateFlow<Map<String, List<LessonScheduleItem>>> = repository.weekSchedule
     val scheduleToday: StateFlow<List<LessonScheduleItem>> = repository.scheduleToday
@@ -107,17 +125,19 @@ class MeshMainViewModel(
         subjectSummaries,
         showWeightedGpa
     ) { profile, summaries, weighted ->
-        val allMarks = summaries.flatMap { it.marks }
+        val allMarks = summaries
+            .flatMap { it.marks }
+            .filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
         if (allMarks.isNotEmpty()) {
             if (weighted) {
                 val totalWeight = allMarks.sumOf { it.weight }
                 if (totalWeight > 0.0) {
-                    allMarks.sumOf { it.value * it.weight } / totalWeight
+                    allMarks.sumOf { it.effectiveValue * it.weight } / totalWeight
                 } else {
-                    allMarks.map { it.value }.average()
+                    allMarks.map { it.effectiveValue }.average()
                 }
             } else {
-                allMarks.map { it.value }.average()
+                allMarks.map { it.effectiveValue }.average()
             }
         } else if (summaries.isNotEmpty()) {
             val avgs = summaries.map { it.getEffectiveAverage(weighted) }.filter { it > 0.0 }
@@ -140,17 +160,55 @@ class MeshMainViewModel(
     private val _isSubjectRankLoading = MutableStateFlow(false)
     val isSubjectRankLoading: StateFlow<Boolean> = _isSubjectRankLoading.asStateFlow()
 
+    fun selectRatingPeriodMode(mode: RatingPeriodMode) {
+        _ratingPeriodMode.value = mode
+        if (mode == RatingPeriodMode.SEMESTER) {
+            loadSemesterRanks()
+        } else if (_selectedRatingSubjectId.value != null) {
+            selectRatingSubject(_selectedRatingSubjectId.value)
+        }
+    }
+
+    private fun resolveSemesterTargetDate(): String {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val startYear = ru.mesh.expressive.util.DateUtils.getAcademicStartYear()
+        val firstSemEnd = "$startYear-12-30"
+        return if (today <= firstSemEnd) today else today
+    }
+
+    private fun loadSemesterRanks() {
+        viewModelScope.launch {
+            _isSubjectRankLoading.value = true
+            try {
+                val subjId = _selectedRatingSubjectId.value
+                val subjName = subjId?.let { id -> subjectSummaries.value.find { it.subjectId == id }?.subject }
+                val list = repository.fetchSubjectClassRank(subjId, subjName, resolveSemesterTargetDate())
+                if (subjId != null) {
+                    _subjectAcademicRanks.value = list
+                } else {
+                    _semesterAcademicRanks.value = list
+                }
+            } finally {
+                _isSubjectRankLoading.value = false
+            }
+        }
+    }
+
     fun selectRatingSubject(subjectId: Long?) {
         _selectedRatingSubjectId.value = subjectId
         if (subjectId == null) {
             _subjectAcademicRanks.value = emptyList()
+            if (_ratingPeriodMode.value == RatingPeriodMode.SEMESTER && _semesterAcademicRanks.value.isEmpty()) {
+                loadSemesterRanks()
+            }
             return
         }
         viewModelScope.launch {
             _isSubjectRankLoading.value = true
             try {
                 val subjName = subjectSummaries.value.find { it.subjectId == subjectId }?.subject
-                val list = repository.fetchSubjectClassRank(subjectId, subjName)
+                val targetDate = if (_ratingPeriodMode.value == RatingPeriodMode.SEMESTER) resolveSemesterTargetDate() else null
+                val list = repository.fetchSubjectClassRank(subjectId, subjName, targetDate)
                 _subjectAcademicRanks.value = list
             } finally {
                 _isSubjectRankLoading.value = false
@@ -373,6 +431,16 @@ class MeshMainViewModel(
     fun setThemeMode(mode: String) {
         sessionManager.themeMode = mode
         _themeMode.value = mode
+    }
+
+    fun toggleAmoledDark(enabled: Boolean) {
+        sessionManager.isAmoledDark = enabled
+        _isAmoledDark.value = enabled
+    }
+
+    fun setStudyPeriodMode(mode: String) {
+        sessionManager.studyPeriodMode = mode
+        _studyPeriodMode.value = mode
     }
 
     fun unlockReward(id: String) {

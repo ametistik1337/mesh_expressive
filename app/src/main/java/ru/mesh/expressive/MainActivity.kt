@@ -117,6 +117,7 @@ class MainActivity : ComponentActivity() {
             )
 
             val themeMode by mainViewModel.themeMode.collectAsState()
+            val isAmoledDark by mainViewModel.isAmoledDark.collectAsState()
             val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val useDarkTheme = when (themeMode) {
                 "DARK" -> true
@@ -127,7 +128,11 @@ class MainActivity : ComponentActivity() {
             val enableSpringPhysics by mainViewModel.enableSpringPhysics.collectAsState()
             val hapticFeedbackEnabled by mainViewModel.hapticFeedbackEnabled.collectAsState()
 
-            MeshExpressiveTheme(darkTheme = useDarkTheme, dynamicColor = isMonetEnabled) {
+            MeshExpressiveTheme(
+                darkTheme = useDarkTheme,
+                dynamicColor = isMonetEnabled,
+                amoledDark = isAmoledDark
+            ) {
                 CompositionLocalProvider(
                     ru.mesh.expressive.ui.components.LocalSpringPhysicsEnabled provides enableSpringPhysics,
                     ru.mesh.expressive.ui.components.LocalHapticFeedbackEnabled provides hapticFeedbackEnabled

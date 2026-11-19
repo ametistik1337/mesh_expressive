@@ -1,5 +1,8 @@
 package ru.mesh.expressive.util
 
+import ru.mesh.expressive.data.model.PeriodScheduleItemDTO
+import ru.mesh.expressive.data.model.StudyPeriodOption
+import ru.mesh.expressive.data.model.SubjectSummary
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -99,5 +102,152 @@ object DateUtils {
         } catch (_: Exception) {
             isoDateStr
         }
+    }
+
+    fun getAcademicStartYear(now: Calendar = Calendar.getInstance()): Int {
+        val year = now.get(Calendar.YEAR)
+        val month = now.get(Calendar.MONTH) // 0-based (7 = August)
+        return if (month >= Calendar.AUGUST) year else year - 1
+    }
+
+    fun shortenPeriodTitle(title: String): String {
+        return title
+            .replace(" четверть", " четв.", ignoreCase = true)
+            .replace(" полугодие", " полуг.", ignoreCase = true)
+            .replace(" семестр", " сем.", ignoreCase = true)
+            .replace(" триместр", " трим.", ignoreCase = true)
+            .replace(" модуль", " мод.", ignoreCase = true)
+    }
+
+    private fun isRecognizedPeriodTitle(title: String): Boolean {
+        return title.contains("четверть", ignoreCase = true) ||
+            title.contains("полугодие", ignoreCase = true) ||
+            title.contains("семестр", ignoreCase = true) ||
+            title.contains("триместр", ignoreCase = true) ||
+            title.contains("модуль", ignoreCase = true)
+    }
+
+    private fun buildFallbackPeriods(mode: String, startYear: Int, today: String): List<StudyPeriodOption> {
+        val nextYear = startYear + 1
+        val raw = when (mode) {
+            "SEMESTERS" -> listOf(
+                StudyPeriodOption("sem_1", "1 полугодие", "1 полуг.", "$startYear-09-01", "$startYear-12-30", false),
+                StudyPeriodOption("sem_2", "2 полугодие", "2 полуг.", "$nextYear-01-11", "$nextYear-05-31", false)
+            )
+            "TRIMESTERS" -> listOf(
+                StudyPeriodOption("trim_1", "1 триместр", "1 трим.", "$startYear-09-01", "$startYear-11-20", false),
+                StudyPeriodOption("trim_2", "2 триместр", "2 трим.", "$startYear-11-21", "$nextYear-02-20", false),
+                StudyPeriodOption("trim_3", "3 триместр", "3 трим.", "$nextYear-02-21", "$nextYear-05-31", false)
+            )
+            "MODULES" -> listOf(
+                StudyPeriodOption("mod_1", "1 модуль", "1 мод.", "$startYear-09-01", "$startYear-10-04", false),
+                StudyPeriodOption("mod_2", "2 модуль", "2 мод.", "$startYear-10-12", "$startYear-11-15", false),
+                StudyPeriodOption("mod_3", "3 модуль", "3 мод.", "$startYear-11-23", "$startYear-12-30", false),
+                StudyPeriodOption("mod_4", "4 модуль", "4 мод.", "$nextYear-01-11", "$nextYear-02-21", false),
+                StudyPeriodOption("mod_5", "5 модуль", "5 мод.", "$nextYear-03-01", "$nextYear-04-11", false),
+                StudyPeriodOption("mod_6", "6 модуль", "6 мод.", "$nextYear-04-19", "$nextYear-05-31", false)
+            )
+            else -> listOf(
+                StudyPeriodOption("q_1", "1 четверть", "1 четв.", "$startYear-09-01", "$startYear-10-23", false),
+                StudyPeriodOption("q_2", "2 четверть", "2 четв.", "$startYear-11-04", "$startYear-12-30", false),
+                StudyPeriodOption("q_3", "3 четверть", "3 четв.", "$nextYear-01-11", "$nextYear-03-12", false),
+                StudyPeriodOption("q_4", "4 четверть", "4 четв.", "$nextYear-03-22", "$nextYear-05-31", false)
+            )
+        }
+        return markCurrentPeriod(raw, today)
+    }
+
+    private fun markCurrentPeriod(periods: List<StudyPeriodOption>, today: String): List<StudyPeriodOption> {
+        if (periods.isEmpty()) return emptyList()
+        val withCurrent = periods.map { p ->
+            val isCur = p.startDate.isNotBlank() && p.endDate.isNotBlank() && today in p.startDate..p.endDate
+            p.copy(isCurrent = isCur)
+        }
+        if (withCurrent.any { it.isCurrent }) return withCurrent
+        val nextOrLast = withCurrent.firstOrNull { it.startDate > today } ?: withCurrent.last()
+        return withCurrent.map { if (it.id == nextOrLast.id) it.copy(isCurrent = true) else it }
+    }
+
+    /**
+     * Вычисляет список учебных периодов (четверти / триместры / полугодия / модули).
+     * В режиме AUTO:
+     *  1) приоритетно берет аттестационные периоды из subjectSummaries.periods (/subject_marks/short);
+     *  2) если их нет — парсит periodsSchedules (/periods_schedules), включая полугодия и модули;
+     *  3) fallback по номеру класса (10-11 классы -> полугодия, остальные -> четверти).
+     */
+    fun resolveStudyPeriods(
+        periodsSchedules: List<PeriodScheduleItemDTO>,
+        subjectSummaries: List<SubjectSummary>,
+        periodMode: String = "AUTO",
+        className: String = ""
+    ): List<StudyPeriodOption> {
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val startYear = getAcademicStartYear()
+
+        if (periodMode != "AUTO") {
+            return buildFallbackPeriods(periodMode, startYear, today)
+        }
+
+        // 1. Аттестационные периоды напрямую из /subject_marks/short
+        val fromSubjects = linkedMapOf<String, Pair<String, String>>()
+        subjectSummaries.forEach { subj ->
+            subj.periods.forEach { p ->
+                val title = p.title.trim()
+                val start = p.startDate.substringBefore("T").trim()
+                val end = p.endDate.substringBefore("T").trim()
+                if (title.isNotBlank() && isRecognizedPeriodTitle(title) && start.isNotBlank() && end.isNotBlank()) {
+                    val existing = fromSubjects[title]
+                    if (existing == null) {
+                        fromSubjects[title] = start to end
+                    } else {
+                        val minStart = minOf(existing.first, start)
+                        val maxEnd = maxOf(existing.second, end)
+                        fromSubjects[title] = minStart to maxEnd
+                    }
+                }
+            }
+        }
+        if (fromSubjects.isNotEmpty()) {
+            val sorted = fromSubjects.map { (title, range) ->
+                StudyPeriodOption(
+                    id = title,
+                    title = title,
+                    shortTitle = shortenPeriodTitle(title),
+                    startDate = range.first,
+                    endDate = range.second,
+                    isCurrent = false
+                )
+            }.sortedBy { it.startDate }
+            return markCurrentPeriod(sorted, today)
+        }
+
+        // 2. Периоды из /periods_schedules (включая полугодия и модули)
+        val groups = mutableMapOf<String, MutableList<String>>()
+        periodsSchedules.forEach { item ->
+            val t = item.title.trim()
+            if (isRecognizedPeriodTitle(t)) {
+                groups.getOrPut(t) { mutableListOf() }.add(item.date.substringBefore("T").trim())
+            }
+        }
+        if (groups.isNotEmpty()) {
+            val sorted = groups.map { (title, dates) ->
+                val start = dates.minOrNull() ?: ""
+                val end = dates.maxOrNull() ?: ""
+                StudyPeriodOption(
+                    id = title,
+                    title = title,
+                    shortTitle = shortenPeriodTitle(title),
+                    startDate = start,
+                    endDate = end,
+                    isCurrent = false
+                )
+            }.sortedBy { it.startDate }
+            return markCurrentPeriod(sorted, today)
+        }
+
+        // 3. Умный fallback по классу (10-11 классы в МЭШ обычно на полугодиях)
+        val gradeNum = Regex("^(\\d+)").find(className.trim())?.groupValues?.getOrNull(1)?.toIntOrNull()
+        val fallbackMode = if (gradeNum != null && gradeNum >= 10) "SEMESTERS" else "QUARTERS"
+        return buildFallbackPeriods(fallbackMode, startYear, today)
     }
 }

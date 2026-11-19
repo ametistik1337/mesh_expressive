@@ -103,6 +103,14 @@ class SessionManager(context: Context) {
         get() = prefs.getString("theme_mode", "SYSTEM") ?: "SYSTEM"
         set(value) = prefs.edit().putString("theme_mode", value).apply()
 
+    var isAmoledDark: Boolean
+        get() = prefs.getBoolean("is_amoled_dark", false)
+        set(value) = prefs.edit().putBoolean("is_amoled_dark", value).apply()
+
+    var studyPeriodMode: String
+        get() = prefs.getString("study_period_mode", "AUTO") ?: "AUTO"
+        set(value) = prefs.edit().putString("study_period_mode", value).apply()
+
     // ======================== Cache Storage ========================
 
     private fun saveJson(key: String, value: Any?) {

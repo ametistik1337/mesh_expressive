@@ -56,6 +56,8 @@ fun SettingsScreen(
     val gamification by viewModel.gamificationProfile.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    val isAmoledDark by viewModel.isAmoledDark.collectAsState()
+    val studyPeriodMode by viewModel.studyPeriodMode.collectAsState()
     val startTab by viewModel.startTab.collectAsState()
     val hapticFeedbackEnabled by viewModel.hapticFeedbackEnabled.collectAsState()
     val hideCompletedHomework by viewModel.hideCompletedHomework.collectAsState()
@@ -338,6 +340,17 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
+                    // AMOLED Black Switch
+                    SettingsToggleRow(
+                        icon = Icons.Default.Contrast,
+                        title = "AMOLED чёрный",
+                        subtitle = "Чистый чёрный фон (#000000) для OLED-экранов в тёмной теме",
+                        isChecked = isAmoledDark,
+                        onCheckedChange = { viewModel.toggleAmoledDark(it) }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
                     // Monet Dynamic Theme
                     SettingsToggleRow(
                         icon = Icons.Default.Palette,
@@ -497,6 +510,39 @@ fun SettingsScreen(
                         isChecked = showWeightedGpa,
                         onCheckedChange = { viewModel.toggleShowWeightedGpa(it) }
                     )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Study Periods Mode Selector
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text("Оценочные периоды", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text("Автоопределение по API МЭШ или ручной выбор", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        val periodOptions = remember {
+                            listOf(
+                                "AUTO" to "Авто",
+                                "SEMESTERS" to "Полугодия",
+                                "QUARTERS" to "Четверти",
+                                "TRIMESTERS" to "Триместры",
+                                "MODULES" to "Модули"
+                            )
+                        }
+                        val selectedPair = periodOptions.find { it.first == studyPeriodMode } ?: periodOptions.first()
+                        ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                            items = periodOptions,
+                            selectedItem = selectedPair,
+                            onItemSelected = { viewModel.setStudyPeriodMode(it.first) },
+                            label = { it.second },
+                            scrollable = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 

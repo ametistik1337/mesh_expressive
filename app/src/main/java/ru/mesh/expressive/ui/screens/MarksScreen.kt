@@ -53,55 +53,21 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
     var selectedSubjectForCalc by remember { mutableStateOf<SubjectSummary?>(null) }
 
     val periodsSchedules by viewModel.periodsSchedules.collectAsState()
+    val studyPeriodMode by viewModel.studyPeriodMode.collectAsState()
+    val studentProfile by viewModel.studentProfile.collectAsState()
 
-    // 1. Вычисляем список учебных периодов (четвертей/семестров) из API с автоопределением активного
-    val studyPeriods = remember(periodsSchedules) {
-        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-        val groups = mutableMapOf<String, MutableList<String>>()
-        periodsSchedules.forEach { item ->
-            val t = item.title.trim()
-            if (t.contains("четверть", ignoreCase = true) ||
-                t.contains("семестр", ignoreCase = true) ||
-                t.contains("триместр", ignoreCase = true)) {
-                groups.getOrPut(t) { mutableListOf() }.add(item.date)
-            }
-        }
-        val list = if (groups.isEmpty()) {
-            listOf(
-                StudyPeriodOption("1", "1 четверть", "1 четв.", "2026-09-01", "2026-10-23", false),
-                StudyPeriodOption("2", "2 четверть", "2 четв.", "2026-11-04", "2026-12-30", true),
-                StudyPeriodOption("3", "3 четверть", "3 четв.", "2027-01-11", "2027-03-12", false),
-                StudyPeriodOption("4", "4 четверть", "4 четв.", "2027-03-22", "2027-05-31", false)
-            )
-        } else {
-            val sorted = groups.map { (title, dates) ->
-                val start = dates.minOrNull() ?: ""
-                val end = dates.maxOrNull() ?: ""
-                val isCur = today in start..end
-                val shortT = title.replace(" четверть", " четв.").replace(" семестр", " сем.").replace(" триместр", " трим.")
-                StudyPeriodOption(
-                    id = title,
-                    title = title,
-                    shortTitle = shortT,
-                    startDate = start,
-                    endDate = end,
-                    isCurrent = isCur
-                )
-            }.sortedBy { it.startDate }
-
-            val hasCurrent = sorted.any { it.isCurrent }
-            if (!hasCurrent && sorted.isNotEmpty()) {
-                val nextOrLast = sorted.firstOrNull { it.startDate > today } ?: sorted.last()
-                sorted.map { if (it.id == nextOrLast.id) it.copy(isCurrent = true) else it }
-            } else {
-                sorted
-            }
-        }
-        list
+    // 1. Вычисляем список учебных периодов (четверти / триместры / полугодия / модули) из API или настройки
+    val studyPeriods = remember(periodsSchedules, subjectSummaries, studyPeriodMode, studentProfile.className) {
+        ru.mesh.expressive.util.DateUtils.resolveStudyPeriods(
+            periodsSchedules = periodsSchedules,
+            subjectSummaries = subjectSummaries,
+            periodMode = studyPeriodMode,
+            className = studentProfile.className
+        )
     }
 
     val allPeriodsOption = remember {
-        StudyPeriodOption(id = "all", title = "Все четверти", shortTitle = "Все", startDate = "", endDate = "", isCurrent = false)
+        StudyPeriodOption(id = "all", title = "Весь год", shortTitle = "Все", startDate = "", endDate = "", isCurrent = false)
     }
 
     val periodOptions = remember(studyPeriods) {
@@ -492,7 +458,7 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "В МЭШ средний балл от 4.60 округляется в итоговую «5» за четверть",
+                                text = "В МЭШ средний балл от 4.60 округляется в итоговую «5» за период",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                             )
@@ -1064,7 +1030,7 @@ fun SubjectMarksCard(
                                         modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        val pShortTitle = p.title.replace(" четверть", " ч.").replace(" семестр", " сем.")
+                                        val pShortTitle = ru.mesh.expressive.util.DateUtils.shortenPeriodTitle(p.title)
                                         Text(
                                             text = pShortTitle,
                                             style = MaterialTheme.typography.labelSmall,
