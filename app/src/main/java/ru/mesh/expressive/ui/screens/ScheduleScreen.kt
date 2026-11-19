@@ -15,9 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -553,6 +551,32 @@ fun DetailedLessonCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                val matCntCompact = if (lesson.fileMaterials.isNotEmpty()) lesson.fileMaterials.size else lesson.materialsCount
+                if (matCntCompact > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val badgeLabel = when {
+                        matCntCompact == 1 -> "1 материал к ДЗ"
+                        matCntCompact in 2..4 -> "$matCntCompact материала к ДЗ"
+                        else -> "$matCntCompact материалов к ДЗ"
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = badgeLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
         }
     } else {
@@ -677,6 +701,40 @@ fun DetailedLessonCard(
                                 text = lesson.homework,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+
+                val matCntDetailed = if (lesson.fileMaterials.isNotEmpty()) lesson.fileMaterials.size else lesson.materialsCount
+                if (matCntDetailed > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val badgeLabel = when {
+                        matCntDetailed == 1 -> "1 материал к ДЗ"
+                        matCntDetailed in 2..4 -> "$matCntDetailed материала к ДЗ"
+                        else -> "$matCntDetailed материалов к ДЗ"
+                    }
+                    Surface(
+                        shape = PillShape,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AttachFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = badgeLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     }

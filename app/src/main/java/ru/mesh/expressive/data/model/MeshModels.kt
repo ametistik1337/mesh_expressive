@@ -54,7 +54,8 @@ data class LessonScheduleItem(
     val isPointCorrected: Boolean = false,
     val hasCorrection: Boolean = false,
     val testMaterials: List<LessonMaterialItem> = emptyList(),
-    val fileMaterials: List<LessonMaterialItem> = emptyList()
+    val fileMaterials: List<LessonMaterialItem> = emptyList(),
+    val materialsCount: Int = 0
 ) {
     val isPointExpired: Boolean
         get() {
@@ -111,8 +112,12 @@ data class LessonDetailInnerDTO(
 
 data class LessonDetailHomeworkDTO(
     @SerializedName("homework") val homework: String? = null,
+    @SerializedName("homework_id") val homeworkId: Long? = null,
+    @SerializedName("homework_entry_id") val homeworkEntryId: Long? = null,
     @SerializedName("homework_entry_student_id") val homeworkEntryStudentId: Long? = null,
-    @SerializedName("is_done") val isDone: Boolean? = null
+    @SerializedName("homework_created_at") val createdAt: String? = null,
+    @SerializedName("is_done") val isDone: Boolean? = null,
+    @SerializedName("additional_materials") val additionalMaterials: List<LessonMaterialDTO>? = null
 )
 
 data class LessonDetailMarkDTO(
@@ -329,17 +334,25 @@ data class EventCalendarItemDTO(
     @SerializedName("teacher") val teacher: TeacherResponseDTO? = null,
     @SerializedName("author") val author: TeacherResponseDTO? = null,
     @SerializedName("homework") val homework: EventHomeworkDTO? = null,
+    @SerializedName("materials") val materials: EventMaterialsCountDTO? = null,
     @SerializedName("marks") val marks: List<EventMarkDTO>? = null,
     @SerializedName("lesson_theme") val lessonTheme: String? = null,
     @SerializedName("title") val title: String? = null,
     @SerializedName("bell_id") val bellId: Long? = null
 )
 
+data class EventMaterialsCountDTO(
+    @SerializedName("count_execute") val countExecute: Int? = null,
+    @SerializedName("count_learn") val countLearn: Int? = null,
+    @SerializedName("count_homework") val countHomework: Int? = null
+)
+
 data class EventHomeworkDTO(
     @SerializedName("presence_status_id") val presenceStatusId: Int? = null,
     @SerializedName("total_count") val totalCount: Int? = null,
     @SerializedName("execute_count") val executeCount: Int? = null,
-    @SerializedName("descriptions") val descriptions: List<String>? = null
+    @SerializedName("descriptions") val descriptions: List<String>? = null,
+    @SerializedName("materials") val materials: EventMaterialsCountDTO? = null
 )
 
 data class EventMarkDTO(
@@ -449,6 +462,8 @@ data class HomeworkItem(
     val digitalTestUrl: String? = null,
     val createdAt: String? = null,
     val attachments: List<HomeworkAttachmentItem> = emptyList(),
+    val teacherFiles: List<LessonMaterialItem> = emptyList(),
+    val materialsCount: Int = 0,
     val rawDueDate: String = "",
     val rawTargetDate: String = "",
     val targetDate: String = "",

@@ -576,7 +576,9 @@ class MeshMainViewModel(
                         markComment = detailed.markComment ?: lesson.markComment,
                         markControlForm = detailed.markControlForm ?: lesson.markControlForm,
                         markCreatedAt = detailed.markCreatedAt ?: lesson.markCreatedAt,
-                        testMaterials = detailed.testMaterials
+                        testMaterials = detailed.testMaterials,
+                        fileMaterials = detailed.fileMaterials,
+                        materialsCount = detailed.fileMaterials.size + detailed.testMaterials.size
                     )
                 }
                 _isLessonDetailsLoading.value = false
@@ -638,15 +640,56 @@ class MeshMainViewModel(
         _markSubjectRanks.value = emptyList()
     }
 
+    private val _downloadedFileNames = MutableStateFlow<Set<String>>(emptySet())
+    val downloadedFileNames: StateFlow<Set<String>> = _downloadedFileNames.asStateFlow()
+
+    private val _currentlyDownloadingUrl = MutableStateFlow<String?>(null)
+    val currentlyDownloadingUrl: StateFlow<String?> = _currentlyDownloadingUrl.asStateFlow()
+
+    fun refreshDownloadedFiles(context: android.content.Context) {
+        _downloadedFileNames.value = ru.mesh.expressive.util.MeshFileDownloader.getDownloadedFileNames(context)
+    }
+
     private val _selectedHomeworkForDetails = MutableStateFlow<ru.mesh.expressive.data.model.HomeworkItem?>(null)
     val selectedHomeworkForDetails: StateFlow<ru.mesh.expressive.data.model.HomeworkItem?> = _selectedHomeworkForDetails.asStateFlow()
 
     fun openHomeworkDetails(homework: ru.mesh.expressive.data.model.HomeworkItem) {
         _selectedHomeworkForDetails.value = homework
+        val lessonId = homework.lessonId
+        if (lessonId != null && lessonId > 0 && homework.teacherFiles.isEmpty()) {
+            viewModelScope.launch {
+                val detailed = repository.fetchLessonDetails(lessonId)
+                if (detailed != null && detailed.fileMaterials.isNotEmpty()) {
+                    val current = _selectedHomeworkForDetails.value
+                    if (current?.id == homework.id) {
+                        _selectedHomeworkForDetails.value = current.copy(
+                            teacherFiles = detailed.fileMaterials,
+                            materialsCount = detailed.fileMaterials.size
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun closeHomeworkDetails() {
         _selectedHomeworkForDetails.value = null
+    }
+
+    fun openAttachment(context: android.content.Context, url: String, fileName: String) {
+        refreshDownloadedFiles(context)
+        if (ru.mesh.expressive.util.MeshFileDownloader.isDownloaded(context, fileName)) {
+            val file = ru.mesh.expressive.util.MeshFileDownloader.getAttachmentFile(context, fileName)
+            val uri = ru.mesh.expressive.util.MeshFileDownloader.getFileUri(context, file)
+            val mime = ru.mesh.expressive.util.MeshFileDownloader.getMimeType(fileName)
+            ru.mesh.expressive.util.MeshFileDownloader.openFile(context, uri, mime, fileName)
+        } else {
+            downloadAttachment(context, url, fileName, openAfterDownload = true)
+        }
+    }
+
+    fun shareAttachment(context: android.content.Context, fileName: String) {
+        ru.mesh.expressive.util.MeshFileDownloader.shareFile(context, fileName)
     }
 
     private val _isAttachmentUploading = MutableStateFlow(false)
@@ -700,6 +743,7 @@ class MeshMainViewModel(
     fun downloadAttachment(context: android.content.Context, url: String, fileName: String, openAfterDownload: Boolean = false) {
         viewModelScope.launch {
             _isDownloadingFile.value = true
+            _currentlyDownloadingUrl.value = url
             val result = ru.mesh.expressive.util.MeshFileDownloader.downloadFile(
                 context = context,
                 url = url,
@@ -707,13 +751,15 @@ class MeshMainViewModel(
                 sessionManager = repository.sessionManager
             )
             _isDownloadingFile.value = false
+            _currentlyDownloadingUrl.value = null
             when (result) {
                 is ru.mesh.expressive.util.DownloadResult.Success -> {
+                    _downloadedFileNames.value = _downloadedFileNames.value + result.fileName
                     _downloadStatusMessage.value = "Файл сохранен: ${result.fileName}"
                     if (openAfterDownload) {
-                        ru.mesh.expressive.util.MeshFileDownloader.openFile(context, result.uri, result.mimeType)
+                        ru.mesh.expressive.util.MeshFileDownloader.openFile(context, result.uri, result.mimeType, result.fileName)
                     } else {
-                        android.widget.Toast.makeText(context, "Файл сохранен в Загрузки: ${result.fileName}", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, "Файл сохранен: ${result.fileName}", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
                 is ru.mesh.expressive.util.DownloadResult.Error -> {

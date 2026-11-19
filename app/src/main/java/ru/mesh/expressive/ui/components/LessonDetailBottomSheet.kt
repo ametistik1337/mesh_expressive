@@ -176,14 +176,18 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
                         .then(
                             if (!lesson.homework.isNullOrBlank()) {
                                 Modifier.clickable {
+                                    val lessonIdLong = lesson.id.replace("ev_", "").substringBefore("_").toLongOrNull()
                                     viewModel.openHomeworkDetails(
                                         ru.mesh.expressive.data.model.HomeworkItem(
                                             id = lesson.id,
+                                            lessonId = lessonIdLong,
                                             subject = lesson.subject,
                                             subjectId = lesson.subjectId,
                                             description = lesson.homework,
                                             date = lesson.date,
-                                            dueDate = lesson.date
+                                            dueDate = lesson.date,
+                                            teacherFiles = lesson.fileMaterials,
+                                            materialsCount = lesson.fileMaterials.size
                                         )
                                     )
                                 }
@@ -228,90 +232,13 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Attached Files & Materials Card (не ЦДЗ)
+                // Teacher Files Card
                 if (lesson.fileMaterials.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = ExpressiveCardShape,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.AttachFile,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Прикрепленные файлы к уроку",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            lesson.fileMaterials.forEach { fileMat ->
-                                val fileUrl = fileMat.url
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                                        .then(
-                                            if (!fileUrl.isNullOrBlank()) {
-                                                Modifier.clickable {
-                                                    viewModel.downloadAttachment(context, fileUrl, fileMat.title, openAfterDownload = true)
-                                                }
-                                            } else Modifier
-                                        )
-                                        .padding(vertical = 6.dp, horizontal = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.Description,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = fileMat.title,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 1,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = fileMat.typeName,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                    if (!fileUrl.isNullOrBlank()) {
-                                        IconButton(
-                                            onClick = {
-                                                viewModel.downloadAttachment(context, fileUrl, fileMat.title, openAfterDownload = false)
-                                            },
-                                            modifier = Modifier.size(32.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Download,
-                                                contentDescription = "Скачать",
-                                                modifier = Modifier.size(20.dp),
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    TeacherAttachmentsSection(
+                        files = lesson.fileMaterials,
+                        viewModel = viewModel
+                    )
                 }
 
                 // Test Materials Card (Only Tests!)

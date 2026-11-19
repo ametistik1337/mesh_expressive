@@ -615,6 +615,32 @@ fun LessonCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                val matCntCompact = if (lesson.fileMaterials.isNotEmpty()) lesson.fileMaterials.size else lesson.materialsCount
+                if (matCntCompact > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val badgeLabel = when {
+                        matCntCompact == 1 -> "1 материал к ДЗ"
+                        matCntCompact in 2..4 -> "$matCntCompact материала к ДЗ"
+                        else -> "$matCntCompact материалов к ДЗ"
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = badgeLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
         }
     } else {
@@ -747,6 +773,40 @@ fun LessonCard(
                         }
                     }
                 }
+
+                val matCntDetailed = if (lesson.fileMaterials.isNotEmpty()) lesson.fileMaterials.size else lesson.materialsCount
+                if (matCntDetailed > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val badgeLabel = when {
+                        matCntDetailed == 1 -> "1 материал к ДЗ"
+                        matCntDetailed in 2..4 -> "$matCntDetailed материала к ДЗ"
+                        else -> "$matCntDetailed материалов к ДЗ"
+                    }
+                    Surface(
+                        shape = PillShape,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AttachFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = badgeLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -844,6 +904,40 @@ fun HomeworkCard(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
+                    }
+                }
+
+                val totalMatCount = if (homework.teacherFiles.isNotEmpty()) homework.teacherFiles.size else if (homework.materialsCount > 0) homework.materialsCount else homework.attachments.size
+                if (totalMatCount > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val badgeLabel = when {
+                        totalMatCount == 1 -> "1 материал к ДЗ"
+                        totalMatCount in 2..4 -> "$totalMatCount материала к ДЗ"
+                        else -> "$totalMatCount материалов к ДЗ"
+                    }
+                    Surface(
+                        shape = PillShape,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AttachFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = badgeLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
                 }
             }

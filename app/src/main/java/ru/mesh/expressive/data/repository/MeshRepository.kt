@@ -724,6 +724,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                         val currentDayLessons = eventMap.getOrPut(dateKey) { mutableListOf() }
                         val lessonNum = currentDayLessons.size + 1
 
+                        val eventMatCount = (ev.homework?.materials?.let { (it.countHomework ?: 0) + (it.countLearn ?: 0) + (it.countExecute ?: 0) } ?: 0) +
+                            (ev.materials?.let { (it.countHomework ?: 0) + (it.countLearn ?: 0) + (it.countExecute ?: 0) } ?: 0)
+
                         val lessonItem = LessonScheduleItem(
                             id = ev.id?.toString() ?: "ev_${lessonNum}_$dateKey",
                             subject = ev.subjectName ?: "Урок",
@@ -744,7 +747,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                             markWeight = markW,
                             markComment = firstMark?.comment,
                             homework = hwDesc,
-                            topic = ev.lessonTheme ?: ev.title
+                            topic = ev.lessonTheme ?: ev.title,
+                            materialsCount = eventMatCount
                         )
                         currentDayLessons.add(lessonItem)
 
@@ -753,6 +757,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                             extraHwList.add(
                                 HomeworkItem(
                                     id = "ev_hw_${ev.id ?: lessonNum}",
+                                    lessonId = ev.id,
                                     subject = ev.subjectName ?: "Предмет",
                                     description = hwDesc,
                                     date = dateKey,
@@ -762,7 +767,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                                     rawDueDate = dateKey,
                                     rawTargetDate = dateKey,
                                     targetDate = formattedDate,
-                                    assignedDate = dateKey
+                                    assignedDate = dateKey,
+                                    materialsCount = eventMatCount
                                 )
                             )
                         }
@@ -827,7 +833,17 @@ class MeshRepository(val sessionManager: SessionManager) {
                             rawDueDate = dueDate,
                             rawTargetDate = rawTargetDate,
                             targetDate = formattedTargetDate,
-                            assignedDate = dateAssigned
+                            assignedDate = dateAssigned,
+                            materialsCount = try {
+                                val amountArr = if (item.materialsAmount?.isJsonArray == true) item.materialsAmount.asJsonArray else null
+                                (amountArr?.sumOf { el ->
+                                    if (el.isJsonObject && el.asJsonObject.has("uuids")) {
+                                        el.asJsonObject.getAsJsonArray("uuids").size()
+                                    } else 1
+                                } ?: 0) + (item.attachments?.size ?: 0)
+                            } catch (_: Exception) {
+                                item.attachments?.size ?: 0
+                            }
                         )
                     }
                 } else emptyList()
@@ -2434,8 +2450,12 @@ class MeshRepository(val sessionManager: SessionManager) {
                 val markVal = rawMarkStr?.removeSuffix(".")?.toIntOrNull()
                 val markW = firstMark?.weight ?: 1.0
 
-                // Filter and enrich test materials
-                val rawMaterials = b.details?.additionalMaterials.orEmpty()
+                // Filter and enrich materials (including homework attachments and lesson materials)
+                val lessonMaterials = b.details?.additionalMaterials.orEmpty()
+                val hwMaterials = b.lessonHomeworks.orEmpty().flatMap { it.additionalMaterials.orEmpty() }
+                val rawMaterials = (lessonMaterials + hwMaterials).distinctBy { mat ->
+                    mat.id?.toString() ?: mat.uuid ?: mat.urls?.firstOrNull()?.url ?: mat.title.orEmpty()
+                }
                 val testMaterials = mutableListOf<LessonMaterialItem>()
                 val fileMaterials = mutableListOf<LessonMaterialItem>()
 
@@ -2470,77 +2490,111 @@ class MeshRepository(val sessionManager: SessionManager) {
                     val actionName = mat.actionName.orEmpty().lowercase()
                     val title = mat.title.orEmpty().lowercase()
 
-                    val isTest = type.contains("test") ||
-                        type == "kim_variant" ||
-                        type == "test_specification" ||
-                        type == "final_test" ||
-                        type == "functional_grammar_test" ||
-                        typeName.contains("тест") ||
-                        title.contains("тест") ||
-                        actionName.contains("пройти") ||
-                        actionName.contains("изучить")
+                    val hasFileExtension = Regex("\\.(pdf|doc|docx|odt|xls|xlsx|ppt|pptx|png|jpg|jpeg|zip|rar|7z|txt)$", RegexOption.IGNORE_CASE).containsMatchIn(mat.title.orEmpty())
+                    val hasFileLink = mat.urls?.any { it.type == "file_link" || it.url?.contains("/attachments/files/") == true } == true
+                    val isExplicitFile = type == "attachments" || type == "attachment" || type == "file" || hasFileLink || hasFileExtension
 
-                    if (isTest) {
-                        val detailed = mat.uuid?.let { detailedMaterialsMap[it] }
-                        val launchUrl = detailed?.urls?.find { it.type == "launch" }?.url
-                            ?: detailed?.urls?.firstOrNull()?.url
-                            ?: mat.urls?.firstOrNull()?.url
+                    if (isExplicitFile) {
+                        val directFileUrl = mat.urls?.find { it.type == "file_link" }?.url
+                            ?: mat.urls?.firstOrNull { it.url?.contains("/attachments/files/") == true }?.url
+                            ?: mat.urls?.firstOrNull { !it.url.isNullOrBlank() }?.url
 
-                        val finalUrl = when {
-                            !launchUrl.isNullOrBlank() -> launchUrl
-                            !mat.uuid.isNullOrBlank() -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.uuid}/launch", "UTF-8")}"
-                            mat.id != null -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.id}/launch", "UTF-8")}"
-                            else -> "https://uchebnik.mos.ru"
+                        val cleanTitle = mat.title?.takeIf { it.isNotBlank() } ?: "Файл к уроку"
+                        val ext = cleanTitle.substringAfterLast('.', "").lowercase()
+                        val cleanTypeName = when (ext) {
+                            "pdf" -> "PDF документ"
+                            "odt" -> "Документ ODT"
+                            "doc", "docx" -> "Документ Word"
+                            "ppt", "pptx" -> "Презентация PowerPoint"
+                            "xls", "xlsx" -> "Таблица Excel"
+                            "zip", "rar", "7z" -> "Архив"
+                            "png", "jpg", "jpeg" -> "Изображение"
+                            else -> mat.typeName?.takeIf { it.isNotBlank() && it != "Прочее" } ?: "Материал к уроку"
                         }
 
-                        val matTitle = detailed?.title?.takeIf { it.isNotBlank() }
-                            ?: mat.title?.takeIf { it.isNotBlank() }
-                            ?: detailed?.typeName?.takeIf { it.isNotBlank() }
-                            ?: mat.typeName?.takeIf { it.isNotBlank() }
-                            ?: "Тестовое задание"
-
-                        val matTypeName = detailed?.typeName?.takeIf { it.isNotBlank() }
-                            ?: mat.typeName?.takeIf { it.isNotBlank() }
-                            ?: "Тест"
-
-                        testMaterials.add(
-                            LessonMaterialItem(
-                                title = matTitle,
-                                typeName = matTypeName,
-                                url = finalUrl,
-                                isFile = false
-                            )
-                        )
-                    } else {
-                        val detailed = mat.uuid?.let { detailedMaterialsMap[it] }
-                        val fileUrl = detailed?.urls?.find { it.type == "download" || it.type == "view" || it.type == "player" }?.url
-                            ?: detailed?.urls?.firstOrNull()?.url
-                            ?: mat.urls?.firstOrNull()?.url
-                            ?: if (!mat.uuid.isNullOrBlank()) "https://uchebnik.mos.ru/cms/materials/${mat.uuid}/view" else null
-
-                        val matTitle = detailed?.title?.takeIf { it.isNotBlank() }
-                            ?: mat.title?.takeIf { it.isNotBlank() }
-                            ?: "Материал к уроку"
-
-                        val matTypeName = detailed?.typeName?.takeIf { it.isNotBlank() }
-                            ?: mat.typeName?.takeIf { it.isNotBlank() }
-                            ?: when {
-                                type.contains("pdf") -> "Документ PDF"
-                                type.contains("doc") -> "Документ"
-                                type.contains("presentation") || type.contains("ppt") -> "Презентация"
-                                type.contains("image") || type.contains("pic") -> "Изображение"
-                                else -> "Прикрепленный файл"
-                            }
-
-                        if (!fileUrl.isNullOrBlank()) {
+                        if (!directFileUrl.isNullOrBlank()) {
                             fileMaterials.add(
                                 LessonMaterialItem(
-                                    title = matTitle,
-                                    typeName = matTypeName,
-                                    url = fileUrl,
+                                    title = cleanTitle,
+                                    typeName = cleanTypeName,
+                                    url = directFileUrl,
                                     isFile = true
                                 )
                             )
+                        }
+                    } else {
+                        val isTest = type.contains("test") ||
+                            type == "kim_variant" ||
+                            type == "test_specification" ||
+                            type == "final_test" ||
+                            type == "functional_grammar_test" ||
+                            typeName.contains("тест") ||
+                            title.contains("тест") ||
+                            actionName.contains("пройти") ||
+                            actionName.contains("изучить")
+
+                        if (isTest) {
+                            val detailed = mat.uuid?.let { detailedMaterialsMap[it] }
+                            val launchUrl = detailed?.urls?.find { it.type == "launch" }?.url
+                                ?: detailed?.urls?.firstOrNull()?.url
+                                ?: mat.urls?.firstOrNull()?.url
+
+                            val finalUrl = when {
+                                !launchUrl.isNullOrBlank() -> launchUrl
+                                !mat.uuid.isNullOrBlank() -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.uuid}/launch", "UTF-8")}"
+                                mat.id != null -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.id}/launch", "UTF-8")}"
+                                else -> "https://uchebnik.mos.ru"
+                            }
+
+                            val matTitle = detailed?.title?.takeIf { it.isNotBlank() }
+                                ?: mat.title?.takeIf { it.isNotBlank() }
+                                ?: detailed?.typeName?.takeIf { it.isNotBlank() }
+                                ?: mat.typeName?.takeIf { it.isNotBlank() }
+                                ?: "Тестовое задание"
+
+                            val matTypeName = detailed?.typeName?.takeIf { it.isNotBlank() }
+                                ?: mat.typeName?.takeIf { it.isNotBlank() }
+                                ?: "Тест"
+
+                            testMaterials.add(
+                                LessonMaterialItem(
+                                    title = matTitle,
+                                    typeName = matTypeName,
+                                    url = finalUrl,
+                                    isFile = false
+                                )
+                            )
+                        } else {
+                            val detailed = mat.uuid?.let { detailedMaterialsMap[it] }
+                            val fileUrl = detailed?.urls?.find { it.type == "download" || it.type == "view" || it.type == "player" }?.url
+                                ?: detailed?.urls?.firstOrNull()?.url
+                                ?: mat.urls?.firstOrNull()?.url
+                                ?: if (!mat.uuid.isNullOrBlank()) "https://uchebnik.mos.ru/cms/materials/${mat.uuid}/view" else null
+
+                            val matTitle = detailed?.title?.takeIf { it.isNotBlank() }
+                                ?: mat.title?.takeIf { it.isNotBlank() }
+                                ?: "Материал к уроку"
+
+                            val matTypeName = detailed?.typeName?.takeIf { it.isNotBlank() }
+                                ?: mat.typeName?.takeIf { it.isNotBlank() }
+                                ?: when {
+                                    type.contains("pdf") -> "Документ PDF"
+                                    type.contains("doc") -> "Документ"
+                                    type.contains("presentation") || type.contains("ppt") -> "Презентация"
+                                    type.contains("image") || type.contains("pic") -> "Изображение"
+                                    else -> "Прикрепленный файл"
+                                }
+
+                            if (!fileUrl.isNullOrBlank()) {
+                                fileMaterials.add(
+                                    LessonMaterialItem(
+                                        title = matTitle,
+                                        typeName = matTypeName,
+                                        url = fileUrl,
+                                        isFile = true
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -2566,7 +2620,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                     homework = hw,
                     topic = b.details?.lessonTopic,
                     testMaterials = testMaterials,
-                    fileMaterials = fileMaterials
+                    fileMaterials = fileMaterials,
+                    materialsCount = fileMaterials.size + testMaterials.size
                 )
             }
         } catch (_: Exception) {}
@@ -2781,6 +2836,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                     val currentDayLessons = eventMap.getOrPut(dateKey) { mutableListOf() }
                     val lessonNum = currentDayLessons.size + 1
 
+                    val eventMatCount = (ev.homework?.materials?.let { (it.countHomework ?: 0) + (it.countLearn ?: 0) + (it.countExecute ?: 0) } ?: 0) +
+                        (ev.materials?.let { (it.countHomework ?: 0) + (it.countLearn ?: 0) + (it.countExecute ?: 0) } ?: 0)
+
                     val lessonItem = LessonScheduleItem(
                         id = ev.id?.toString() ?: "ev_${lessonNum}_$dateKey",
                         subject = ev.subjectName ?: "Урок",
@@ -2801,7 +2859,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                         markWeight = markW,
                         markComment = firstMark?.comment,
                         homework = hwDesc,
-                        topic = ev.lessonTheme ?: ev.title
+                        topic = ev.lessonTheme ?: ev.title,
+                        materialsCount = eventMatCount
                     )
                     currentDayLessons.add(lessonItem)
                 }
