@@ -448,24 +448,11 @@ class MeshRepository(val sessionManager: SessionManager) {
     }
 
     fun calculateLiveGpa(showWeighted: Boolean = sessionManager.showWeightedGpa): Double {
-        val allMarks = _subjectSummaries.value
-            .flatMap { it.marks }
-            .filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
-        if (allMarks.isNotEmpty()) {
-            return if (showWeighted) {
-                val totalWeight = allMarks.sumOf { it.weight }
-                if (totalWeight > 0.0) {
-                    allMarks.sumOf { it.effectiveValue * it.weight } / totalWeight
-                } else {
-                    allMarks.map { it.effectiveValue }.average()
-                }
-            } else {
-                allMarks.map { it.effectiveValue }.average()
-            }
-        }
+        if (_studentProfile.value.gpa > 0.0) return _studentProfile.value.gpa
+        if (_ratingInfo.value.score > 0) return _ratingInfo.value.score / 20.0
         val validSubjAvgs = _subjectSummaries.value.map { it.averageMark }.filter { it > 0.0 }
         if (validSubjAvgs.isNotEmpty()) return validSubjAvgs.average()
-        return _studentProfile.value.gpa
+        return 0.0
     }
 
     private fun sortServerRankItems(
@@ -495,12 +482,8 @@ class MeshRepository(val sessionManager: SessionManager) {
     }
 
     fun refreshLiveGpaAndRating() {
-        val liveGpa = calculateLiveGpa(sessionManager.showWeightedGpa)
-        if (liveGpa > 0.0) {
-            val updated = _studentProfile.value.copy(gpa = liveGpa)
-            _studentProfile.value = updated
-            sessionManager.cachedProfile = updated
-        }
+        sessionManager.cachedRatingInfo?.let { _ratingInfo.value = it }
+        sessionManager.cachedProfile?.let { _studentProfile.value = it }
     }
 
     private fun loadCachedData() {
@@ -1087,26 +1070,6 @@ class MeshRepository(val sessionManager: SessionManager) {
                     if (summaries.isNotEmpty()) {
                         _subjectSummaries.value = summaries
                         sessionManager.cachedSubjectSummaries = summaries
-
-                        val allLoadedMarks = summaries.flatMap { it.marks }.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
-                        val overallGpa = if (allLoadedMarks.isNotEmpty()) {
-                            if (sessionManager.showWeightedGpa) {
-                                val totalWeight = allLoadedMarks.sumOf { it.weight }
-                                if (totalWeight > 0.0) {
-                                    allLoadedMarks.sumOf { it.effectiveValue * it.weight } / totalWeight
-                                } else {
-                                    allLoadedMarks.map { it.effectiveValue }.average()
-                                }
-                            } else {
-                                allLoadedMarks.map { it.effectiveValue }.average()
-                            }
-                        } else {
-                            val validGpas = summaries.map { it.averageMark }.filter { it > 0.0 }
-                            if (validGpas.isNotEmpty()) validGpas.average() else _studentProfile.value.gpa
-                        }
-                        val updatedProfile = _studentProfile.value.copy(gpa = overallGpa)
-                        _studentProfile.value = updatedProfile
-                        sessionManager.cachedProfile = updatedProfile
                     }
                 } else if (rawMarksMap.isNotEmpty()) {
                     val rawMarks = rawMarksMap.values.toList()
@@ -1424,6 +1387,12 @@ class MeshRepository(val sessionManager: SessionManager) {
                     )
                     _ratingInfo.value = rInfo
                     sessionManager.cachedRatingInfo = rInfo
+
+                    if (finalAvgMark > 0.0) {
+                        val updatedProf = _studentProfile.value.copy(gpa = finalAvgMark)
+                        _studentProfile.value = updatedProf
+                        sessionManager.cachedProfile = updatedProf
+                    }
 
                     // Также обновляем рейтинг и средний балл в списке одноклассников
                     if (reconciledAcademicItems.isNotEmpty()) {

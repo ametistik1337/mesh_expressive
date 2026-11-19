@@ -1,6 +1,7 @@
 package ru.mesh.expressive.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -11,12 +12,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +49,7 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
     val subjectAcademicRanks by viewModel.subjectAcademicRanks.collectAsState()
     val isSubjectRankLoading by viewModel.isSubjectRankLoading.collectAsState()
     val ratingPeriodMode by viewModel.ratingPeriodMode.collectAsState()
+    var showGpaInfoDialog by remember { mutableStateOf(false) }
 
     val rawRanks = remember(selectedRatingSubjectId, ratingPeriodMode, subjectAcademicRanks, semesterAcademicRanks, academicRanks) {
         when {
@@ -110,18 +115,20 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
                 ) {
                     val myRankItem = currentRanks.find { it.isCurrentUser }
                     val effectiveClassRank = myRankItem?.rankPlace?.takeIf { it > 0 }
-                        ?: if (ratingPeriodMode == RatingPeriodMode.YEAR && selectedRatingSubjectId == null) rating.classRank else 0
-                    val effectiveAvg = myRankItem?.averageMark?.takeIf { it > 0.0 }
-                        ?: if (ratingPeriodMode == RatingPeriodMode.YEAR && selectedRatingSubjectId == null) (rating.score / 20.0).takeIf { it > 0.0 } ?: 0.0 else 0.0
+                        ?: if (selectedRatingSubjectId == null) rating.classRank else 0
+                    val effectiveAvg = when (ratingPeriodMode) {
+                        RatingPeriodMode.MONTH -> myRankItem?.averageMark?.takeIf { it > 0.0 } ?: myRankItem?.averageMark30?.takeIf { it > 0.0 } ?: 0.0
+                        else -> myRankItem?.averageMark?.takeIf { it > 0.0 } ?: (rating.score / 20.0).takeIf { it > 0.0 } ?: 0.0
+                    }
                     val effectiveRankChange = if (myRankItem != null) {
                         if (myRankItem.rankStatus.equals("up", ignoreCase = true)) 1
                         else if (myRankItem.rankStatus.equals("down", ignoreCase = true)) -1
                         else 0
                     } else {
-                        if (ratingPeriodMode == RatingPeriodMode.YEAR && selectedRatingSubjectId == null) rating.rankChange else 0
+                        if (selectedRatingSubjectId == null) rating.rankChange else 0
                     }
                     val totalRanked = currentRanks.size.takeIf { it > 0 }
-                        ?: if (ratingPeriodMode == RatingPeriodMode.YEAR && selectedRatingSubjectId == null) rating.totalInClass else 0
+                        ?: if (selectedRatingSubjectId == null) rating.totalInClass else 0
 
                     Column(modifier = Modifier.padding(20.dp)) {
                         Row(
@@ -178,15 +185,27 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
                                 val avgMarkFormatted = if (effectiveAvg > 0.0) String.format(Locale.US, "%.2f", effectiveAvg) else "—"
                                 Surface(
                                     shape = PillShape,
-                                    color = ScoreGreenContainer
+                                    color = ScoreGreenContainer,
+                                    modifier = Modifier.clickable { showGpaInfoDialog = true }
                                 ) {
-                                    Text(
-                                        text = "Средний балл: $avgMarkFormatted",
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ScoreGreen
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = "Средний балл: $avgMarkFormatted",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ScoreGreen
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = "О сервере МЭШ",
+                                            tint = ScoreGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
 
                                 Surface(
@@ -552,5 +571,42 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
                 }
             }
         }
+    }
+
+    if (showGpaInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showGpaInfoDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Обновление данных МЭШ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Рейтинг и средний балл учащегося подтягиваются напрямую с серверов МЭШ без локальных расчётов.\n\nИз-за особенностей инфраструктуры МЭШ эти показатели обновляются централизованно достаточно редко и нестабильно (как правило, один раз в сутки ночью). Свежие оценки, выставленные учителями в течение дня, учитываются сервером с задержкой.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showGpaInfoDialog = false },
+                    shape = PillShape
+                ) {
+                    Text("Понятно")
+                }
+            },
+            shape = ExpressiveCardShape
+        )
     }
 }

@@ -122,28 +122,14 @@ class MeshMainViewModel(
 
     val activeGpa: StateFlow<Double> = combine(
         studentProfile,
-        subjectSummaries,
-        showWeightedGpa
-    ) { profile, summaries, weighted ->
-        val allMarks = summaries
-            .flatMap { it.marks }
-            .filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
-        if (allMarks.isNotEmpty()) {
-            if (weighted) {
-                val totalWeight = allMarks.sumOf { it.weight }
-                if (totalWeight > 0.0) {
-                    allMarks.sumOf { it.effectiveValue * it.weight } / totalWeight
-                } else {
-                    allMarks.map { it.effectiveValue }.average()
-                }
-            } else {
-                allMarks.map { it.effectiveValue }.average()
-            }
-        } else if (summaries.isNotEmpty()) {
-            val avgs = summaries.map { it.getEffectiveAverage(weighted) }.filter { it > 0.0 }
-            if (avgs.isNotEmpty()) avgs.average() else profile.gpa
-        } else {
+        ratingInfo
+    ) { profile, rInfo ->
+        if (profile.gpa > 0.0) {
             profile.gpa
+        } else if (rInfo.score > 0) {
+            rInfo.score / 20.0
+        } else {
+            0.0
         }
     }.stateIn(
         scope = viewModelScope,

@@ -171,26 +171,9 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
             )
     }
 
+    var showGpaInfoDialog by remember { mutableStateOf(false) }
     val activeGpa by viewModel.activeGpa.collectAsState()
-    val displayGpa = remember(displaySubjectSummaries, showWeightedGpa, activeGpa, selectedPeriod) {
-        if (selectedPeriod.id == "all") {
-            activeGpa
-        } else {
-            val allMarks = displaySubjectSummaries.flatMap { it.marks }
-                .filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
-            if (allMarks.isNotEmpty()) {
-                if (showWeightedGpa) {
-                    val wTotal = allMarks.sumOf { it.weight }
-                    if (wTotal > 0.0) allMarks.sumOf { it.effectiveValue * it.weight } / wTotal else 0.0
-                } else {
-                    allMarks.map { it.effectiveValue }.average()
-                }
-            } else {
-                val nonZeroAverages = displaySubjectSummaries.map { it.averageMark }.filter { it > 0.0 }
-                if (nonZeroAverages.isNotEmpty()) nonZeroAverages.average() else 0.0
-            }
-        }
-    }
+    val displayGpa = activeGpa
 
     val periodSubtitle = remember(selectedPeriod) {
         if (selectedPeriod.id == "all") {
@@ -237,18 +220,34 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = gpaLabel,
+                                        text = "Средний балл (МЭШ)",
                                         style = MaterialTheme.typography.labelLarge,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                     )
-                                    Text(
-                                        text = if (displayGpa > 0.0) "Средний балл: ${String.format(java.util.Locale.US, "%.2f", displayGpa)}" else "Средний балл: —",
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = if (displayGpa > 0.0) "Средний балл: ${String.format(java.util.Locale.US, "%.2f", displayGpa)}" else "Средний балл: —",
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        IconButton(
+                                            onClick = { showGpaInfoDialog = true },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Info,
+                                                contentDescription = "Информация об обновлении балла",
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
@@ -474,6 +473,43 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                     Text("Понятно")
                 }
             }
+        )
+    }
+
+    if (showGpaInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showGpaInfoDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Обновление данных МЭШ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Средний балл и рейтинг учащегося подтягиваются напрямую с серверов МЭШ без локальных расчётов.\n\nИз-за особенностей инфраструктуры МЭШ эти данные обновляются централизованно достаточно редко и нестабильно (как правило, один раз в сутки ночью). Свежие оценки, выставленные учителями в течение дня, учитываются сервером с задержкой.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showGpaInfoDialog = false },
+                    shape = PillShape
+                ) {
+                    Text("Понятно")
+                }
+            },
+            shape = ExpressiveCardShape
         )
     }
 }
