@@ -227,7 +227,11 @@ data class AttendanceLessonItemDTO(
     @SerializedName("lesson_education_type")
     val lessonEducationType: String? = null,
     @SerializedName("health_status")
-    val healthStatus: String? = null
+    val healthStatus: String? = null,
+    @SerializedName("begin_time")
+    val beginTime: String? = null,
+    @SerializedName("end_time")
+    val endTime: String? = null
 )
 
 data class EmiasMedicalRecommendationDTO(

@@ -408,6 +408,7 @@ class MeshRepository(val sessionManager: SessionManager) {
 
     private val _attendance = MutableStateFlow(AttendanceSummary())
     val attendance: StateFlow<AttendanceSummary> = _attendance.asStateFlow()
+    private var rawAttendanceDto: AttendanceResponseDTO? = null
 
     private val _periodsSchedules = MutableStateFlow<List<PeriodScheduleItemDTO>>(emptyList())
     val periodsSchedules: StateFlow<List<PeriodScheduleItemDTO>> = _periodsSchedules.asStateFlow()
@@ -742,7 +743,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                             markId = firstMark?.id,
                             markWeight = markW,
                             markComment = firstMark?.comment,
-                            homework = hwDesc
+                            homework = hwDesc,
+                            topic = ev.lessonTheme ?: ev.title
                         )
                         currentDayLessons.add(lessonItem)
 
@@ -1424,43 +1426,12 @@ class MeshRepository(val sessionManager: SessionManager) {
                     clientType = "diary-mobile",
                     studentId = dynamicStudentId,
                     from = "2026-08-01",
-                    to = todayStr
+                    to = "2027-06-30"
                 )
                 if (attResp.isSuccessful && attResp.body() != null) {
                     val attDto = attResp.body()!!
-                    val days = attDto.attendance
-                    var totalAbsenceLessons = 0
-                    var excusedLessons = 0
-                    var unexcusedLessons = 0
-                    days.forEach { day ->
-                        val lessonList = day.lessons
-                        if (lessonList.isNotEmpty()) {
-                            lessonList.forEach { lesson ->
-                                totalAbsenceLessons++
-                                val isExcused = lesson.reasonId != null || lesson.notified == true || lesson.healthStatus != null
-                                if (isExcused) excusedLessons++ else unexcusedLessons++
-                            }
-                        } else {
-                            totalAbsenceLessons += 6
-                            val isExcused = day.reasonId != null || day.notified == true
-                            if (isExcused) excusedLessons += 6 else unexcusedLessons += 6
-                        }
-                    }
-                    val totalSchoolLessons = (totalAbsenceLessons * 3).coerceAtLeast(60)
-                    val attendedL = (totalSchoolLessons - totalAbsenceLessons).coerceAtLeast(0)
-                    val pct = if (totalSchoolLessons > 0) {
-                        ((attendedL.toDouble() / totalSchoolLessons) * 100.0).coerceIn(0.0, 100.0)
-                    } else 100.0
-
-                    val updated = _attendance.value.copy(
-                        totalLessons = totalSchoolLessons,
-                        attendedLessons = attendedL,
-                        excusedAbsences = excusedLessons,
-                        unexcusedAbsences = unexcusedLessons,
-                        percentage = Math.round(pct * 10.0) / 10.0
-                    )
-                    _attendance.value = updated
-                    sessionManager.cachedAttendance = updated
+                    rawAttendanceDto = attDto
+                    updateMergedAttendance(attDto = rawAttendanceDto)
                 }
             }
         } catch (_: Exception) {}
@@ -1534,11 +1505,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                 }
 
                 if (records.isNotEmpty()) {
-                    val updated = _attendance.value.copy(
-                        emiasCertificates = records
-                    )
-                    _attendance.value = updated
-                    sessionManager.cachedAttendance = updated
+                    val currentYearRecords = records.filter { it.startDate >= "2026-08-01" }
+                    updateMergedAttendance(emias = currentYearRecords)
                 }
             }
         } catch (_: Exception) {}
@@ -1597,7 +1565,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                                             timeIn = inTime,
                                             timeOut = outTime,
                                             duration = dur,
-                                            isCurrentlyInSchool = isCurInSchool
+                                            isCurrentlyInSchool = isCurInSchool,
+                                            rawDate = dateStr
                                         )
                                     )
                                 }
@@ -1607,9 +1576,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                 }
 
                 if (allVisits.isNotEmpty()) {
-                    val updated = _attendance.value.copy(visits = allVisits)
-                    _attendance.value = updated
-                    sessionManager.cachedAttendance = updated
+                    updateMergedAttendance(visits = allVisits)
                 }
             }
         } catch (_: Exception) {}
@@ -2833,7 +2800,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                         markId = firstMark?.id,
                         markWeight = markW,
                         markComment = firstMark?.comment,
-                        homework = hwDesc
+                        homework = hwDesc,
+                        topic = ev.lessonTheme ?: ev.title
                     )
                     currentDayLessons.add(lessonItem)
                 }
@@ -2854,5 +2822,239 @@ class MeshRepository(val sessionManager: SessionManager) {
         sessionManager.logout()
         sessionManager.clear()
         loadDemoData()
+    }
+
+    private fun updateMergedAttendance(
+        attDto: AttendanceResponseDTO? = rawAttendanceDto,
+        visits: List<SchoolVisitRecord> = _attendance.value.visits,
+        emias: List<EmiasRecord> = _attendance.value.emiasCertificates
+    ) {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val todayStr = sdf.format(Date())
+        val yesterdayCal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+        val yesterdayStr = sdf.format(yesterdayCal.time)
+
+        val visitsByDate = mutableMapOf<String, SchoolVisitRecord>()
+        visits.forEach { v ->
+            if (v.rawDate.isNotBlank()) {
+                visitsByDate[v.rawDate] = v
+            }
+        }
+
+        val attDays = attDto?.attendance.orEmpty()
+        val attByDate = mutableMapOf<String, AttendanceDayItemDTO>()
+        attDays.forEach { day ->
+            if (day.date.isNotBlank()) {
+                attByDate[day.date] = day
+            }
+        }
+
+        // Planned Absences
+        val plannedList = mutableListOf<PlannedAbsenceItem>()
+        attDays.forEach { day ->
+            val isPlanned = day.reasonId == 6 || day.reasonId == 9 || day.notified == true ||
+                day.lessons.any { it.notified == true || it.reasonId == 6 || it.reasonId == 9 }
+            if (isPlanned) {
+                val missed = day.lessons.map { l ->
+                    val sched = findLessonInSchedule(day.date, l.scheduleItemId, l.subjectName, l.bellId)
+                    val tStr = when {
+                        !l.beginTime.isNullOrBlank() && !l.endTime.isNullOrBlank() -> "${l.beginTime}—${l.endTime}"
+                        sched != null && sched.startTime.isNotBlank() -> "${sched.startTime}—${sched.endTime}"
+                        else -> ""
+                    }
+                    MissedLessonItem(
+                        lessonNumber = sched?.lessonNumber ?: 1,
+                        subjectName = l.subjectName ?: sched?.subject ?: "Урок",
+                        timeStr = tStr,
+                        theme = sched?.topic ?: "",
+                        reason = getAttendanceReasonName(l.reasonId ?: day.reasonId, l.healthStatus, l.notified ?: day.notified),
+                        description = l.description ?: day.description ?: "",
+                        isExcused = true,
+                        isNotified = l.notified == true || day.notified == true,
+                        isPlanned = true
+                    )
+                }
+                val cnt = if (missed.isNotEmpty()) missed.size else 1
+                val cntFormatted = when {
+                    cnt % 10 == 1 && cnt % 100 != 11 -> "$cnt урок"
+                    cnt % 10 in 2..4 && (cnt % 100 < 10 || cnt % 100 >= 20) -> "$cnt урока"
+                    else -> "$cnt уроков"
+                }
+                val shortDate = formatShortAbsenceDate(day.date)
+                val desc = day.description?.takeIf { it.isNotBlank() }
+                    ?: missed.mapNotNull { it.description.takeIf { d -> d.isNotBlank() } }.firstOrNull()
+                    ?: "Запланированный пропуск"
+                plannedList.add(
+                    PlannedAbsenceItem(
+                        id = "plan_${day.date}",
+                        date = day.date,
+                        dateFormatted = shortDate,
+                        lessonsCount = cnt,
+                        lessonsCountFormatted = cntFormatted,
+                        description = desc,
+                        reasonName = getAttendanceReasonName(day.reasonId, null, day.notified),
+                        lessons = missed
+                    )
+                )
+            }
+        }
+        val sortedPlanned = plannedList.sortedBy { it.date }
+
+        // Merged Days Timeline
+        val allDates = (visitsByDate.keys + attByDate.keys).distinct().sortedDescending()
+        val timelineDays = allDates.map { dStr ->
+            val visit = visitsByDate[dStr]
+            val attDay = attByDate[dStr]
+            val isToday = (dStr == todayStr)
+            val isYesterday = (dStr == yesterdayStr)
+            val isFuture = (dStr > todayStr)
+            val (dateFmt, dow) = formatTimelineDay(dStr, isToday, isYesterday)
+
+            val missed = attDay?.lessons.orEmpty().map { l ->
+                val sched = findLessonInSchedule(dStr, l.scheduleItemId, l.subjectName, l.bellId)
+                val tStr = when {
+                    !l.beginTime.isNullOrBlank() && !l.endTime.isNullOrBlank() -> "${l.beginTime}—${l.endTime}"
+                    sched != null && sched.startTime.isNotBlank() -> "${sched.startTime}—${sched.endTime}"
+                    else -> ""
+                }
+                val isPlan = l.reasonId == 6 || l.reasonId == 9 || l.notified == true || attDay?.notified == true
+                MissedLessonItem(
+                    lessonNumber = sched?.lessonNumber ?: 1,
+                    subjectName = l.subjectName ?: sched?.subject ?: "Урок",
+                    timeStr = tStr,
+                    theme = sched?.topic ?: "",
+                    reason = getAttendanceReasonName(l.reasonId ?: attDay?.reasonId, l.healthStatus, l.notified ?: attDay?.notified),
+                    description = l.description ?: attDay?.description ?: "",
+                    isExcused = isAttendanceExcused(l.reasonId ?: attDay?.reasonId, l.healthStatus, l.notified ?: attDay?.notified),
+                    isNotified = l.notified == true || attDay?.notified == true,
+                    isPlanned = isPlan
+                )
+            }
+
+            val plan = sortedPlanned.find { it.date == dStr }
+            val hasIll = attDay?.lessons?.any { it.healthStatus != null } == true ||
+                attDay?.reasonId == 1 || attDay?.reasonId == 5
+            val allExcused = missed.isEmpty() || missed.all { it.isExcused }
+
+            AttendanceDayRecord(
+                rawDate = dStr,
+                dateFormatted = dateFmt,
+                dayOfWeek = dow,
+                isToday = isToday,
+                isFuture = isFuture,
+                visit = visit,
+                missedLessons = missed,
+                plannedAbsence = plan,
+                hasIllness = hasIll,
+                isExcused = allExcused,
+                summary = attDay?.summary ?: ""
+            )
+        }
+
+        // Real attendance stats (up to today)
+        var totalMissed = 0
+        var excused = 0
+        var unexcused = 0
+        var illness = 0
+        attDays.filter { it.date <= todayStr }.forEach { day ->
+            if (day.lessons.isNotEmpty()) {
+                day.lessons.forEach { l ->
+                    totalMissed++
+                    val isEx = isAttendanceExcused(l.reasonId ?: day.reasonId, l.healthStatus, l.notified ?: day.notified)
+                    if (isEx) excused++ else unexcused++
+                    if (l.healthStatus != null || l.reasonId == 1 || l.reasonId == 5) illness++
+                }
+            } else if (day.reasonId != null || day.notified == true) {
+                totalMissed += 6
+                val isEx = isAttendanceExcused(day.reasonId, null, day.notified)
+                if (isEx) excused += 6 else unexcused += 6
+                if (day.reasonId == 1 || day.reasonId == 5) illness += 6
+            }
+        }
+
+        val updated = AttendanceSummary(
+            totalLessons = totalMissed,
+            attendedLessons = if (totalMissed > 0) 100 else 0,
+            excusedAbsences = excused,
+            unexcusedAbsences = unexcused,
+            percentage = 100.0,
+            totalAbsenceLessons = totalMissed,
+            illnessAbsences = illness,
+            plannedAbsencesCount = sortedPlanned.size,
+            plannedAbsences = sortedPlanned,
+            days = timelineDays,
+            emiasCertificates = emias,
+            visits = visits
+        )
+
+        _attendance.value = updated
+        sessionManager.cachedAttendance = updated
+    }
+
+    private fun findLessonInSchedule(date: String, scheduleItemId: Long?, subjectName: String?, bellId: Long?): LessonScheduleItem? {
+        val dayLessons = _weekSchedule.value[date].orEmpty()
+        if (dayLessons.isEmpty()) return null
+        if (scheduleItemId != null && scheduleItemId > 0) {
+            val byId = dayLessons.find { it.id == scheduleItemId.toString() || it.id.endsWith("_$scheduleItemId") }
+            if (byId != null) return byId
+        }
+        if (!subjectName.isNullOrBlank()) {
+            val bySubj = dayLessons.find { it.subject.equals(subjectName, ignoreCase = true) }
+            if (bySubj != null) return bySubj
+        }
+        return null
+    }
+
+    private fun getAttendanceReasonName(reasonId: Int?, healthStatus: String?, notified: Boolean?): String {
+        if (healthStatus == "SICK" || healthStatus == "SICK_WITH_INFECTION") return "Пропуск по болезни"
+        if (healthStatus == "EXEMPT") return "Освобождение"
+        return when (reasonId) {
+            1 -> "Пропуск по болезни"
+            2 -> "Пропуск по самочувствию"
+            3 -> "Пропуск по семейным обстоятельствам"
+            4 -> "Пропуск без уведомления"
+            5 -> "Пропуск по болезни (ЕМИАС)"
+            6 -> "Запланированный пропуск"
+            7 -> "Карантин"
+            8 -> "Пропуск без уведомления"
+            9 -> "Запланированный пропуск"
+            10 -> "Индивидуальный учебный план"
+            11 -> "Каникулы"
+            12 -> "Каникулы"
+            else -> if (notified == true) "Запланированный пропуск" else "Пропуск без уведомления"
+        }
+    }
+
+    private fun isAttendanceExcused(reasonId: Int?, healthStatus: String?, notified: Boolean?): Boolean {
+        if (healthStatus != null) return true
+        if (notified == true) return true
+        return when (reasonId) {
+            1, 2, 3, 5, 6, 7, 9, 10, 11, 12 -> true
+            else -> false
+        }
+    }
+
+    private fun formatShortAbsenceDate(isoDate: String): String {
+        return try {
+            val d = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(isoDate)
+            if (d != null) {
+                SimpleDateFormat("d MMM", Locale("ru")).format(d).trimEnd('.')
+            } else isoDate
+        } catch (_: Exception) { isoDate }
+    }
+
+    private fun formatTimelineDay(isoDate: String, isToday: Boolean, isYesterday: Boolean): Pair<String, String> {
+        return try {
+            val d = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(isoDate)
+            if (d != null) {
+                val dateFmt = SimpleDateFormat("d MMMM", Locale("ru")).format(d)
+                val dow = when {
+                    isToday -> "сегодня"
+                    isYesterday -> "вчера"
+                    else -> SimpleDateFormat("EEEE", Locale("ru")).format(d).lowercase()
+                }
+                dateFmt to dow
+            } else isoDate to ""
+        } catch (_: Exception) { isoDate to "" }
     }
 }
