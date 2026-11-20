@@ -177,7 +177,7 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
 
     val periodSubtitle = remember(selectedPeriod) {
         if (selectedPeriod.id == "all") {
-            "Все учебные периоды 2026/2027 учебного года"
+            "Все учебные периоды ${ru.mesh.expressive.util.DateUtils.getAcademicYearLabel()} учебного года"
         } else {
             val startFormatted = ru.mesh.expressive.util.DateUtils.formatPointDate(selectedPeriod.startDate)
             val endFormatted = ru.mesh.expressive.util.DateUtils.formatPointDate(selectedPeriod.endDate)

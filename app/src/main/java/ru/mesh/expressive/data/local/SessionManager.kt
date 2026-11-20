@@ -139,15 +139,39 @@ class SessionManager(context: Context) {
         set(value) = saveJson("cached_profile", value)
 
     var cachedScheduleToday: List<LessonScheduleItem>?
-        get() = getJson("cached_schedule_today")
+        get() {
+            val json = prefs.getString("cached_schedule_today", null) ?: return null
+            return try {
+                val type = object : TypeToken<List<LessonScheduleItem>>() {}.type
+                gson.fromJson(json, type)
+            } catch (_: Exception) {
+                null
+            }
+        }
         set(value) = saveJson("cached_schedule_today", value)
 
     var cachedScheduleTomorrow: List<LessonScheduleItem>?
-        get() = getJson("cached_schedule_tomorrow")
+        get() {
+            val json = prefs.getString("cached_schedule_tomorrow", null) ?: return null
+            return try {
+                val type = object : TypeToken<List<LessonScheduleItem>>() {}.type
+                gson.fromJson(json, type)
+            } catch (_: Exception) {
+                null
+            }
+        }
         set(value) = saveJson("cached_schedule_tomorrow", value)
 
     var cachedWeekSchedule: Map<String, List<LessonScheduleItem>>?
-        get() = getJson("cached_week_schedule")
+        get() {
+            val json = prefs.getString("cached_week_schedule", null) ?: return null
+            return try {
+                val type = object : TypeToken<Map<String, List<LessonScheduleItem>>>() {}.type
+                gson.fromJson(json, type)
+            } catch (_: Exception) {
+                null
+            }
+        }
         set(value) = saveJson("cached_week_schedule", value)
 
     var cachedHomeworkList: List<HomeworkItem>?

@@ -250,4 +250,34 @@ object DateUtils {
         val fallbackMode = if (gradeNum != null && gradeNum >= 10) "SEMESTERS" else "QUARTERS"
         return buildFallbackPeriods(fallbackMode, startYear, today)
     }
+
+    /**
+     * Возвращает начальную дату учебного года в формате YYYY-08-01
+     */
+    fun getAcademicYearStart(): String {
+        val cal = Calendar.getInstance()
+        val year = cal.get(Calendar.YEAR)
+        val month = cal.get(Calendar.MONTH) + 1
+        return if (month >= 8) "$year-08-01" else "${year - 1}-08-01"
+    }
+
+    /**
+     * Возвращает конечную дату учебного года в формате YYYY-06-30
+     */
+    fun getAcademicYearEnd(): String {
+        val cal = Calendar.getInstance()
+        val year = cal.get(Calendar.YEAR)
+        val month = cal.get(Calendar.MONTH) + 1
+        return if (month >= 8) "${year + 1}-06-30" else "$year-06-30"
+    }
+
+    /**
+     * Возвращает строковую метку учебного года, например "2026 / 2027"
+     */
+    fun getAcademicYearLabel(): String {
+        val cal = Calendar.getInstance()
+        val year = cal.get(Calendar.YEAR)
+        val month = cal.get(Calendar.MONTH) + 1
+        return if (month >= 8) "$year / ${year + 1}" else "${year - 1} / $year"
+    }
 }

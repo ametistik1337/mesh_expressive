@@ -152,7 +152,7 @@ fun AttendanceScreen(viewModel: MeshMainViewModel) {
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "2026 / 2027",
+                            text = ru.mesh.expressive.util.DateUtils.getAcademicYearLabel(),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,7 +72,7 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
         }
     }
 
-    var weekOffset by remember { mutableIntStateOf(if (isNextWeekAuto) 1 else 0) }
+    var weekOffset by rememberSaveable { mutableIntStateOf(if (isNextWeekAuto) 1 else 0) }
 
     val weekDays = remember(weekOffset) {
         val cal = java.util.Calendar.getInstance()
@@ -104,8 +105,8 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
     LaunchedEffect(weekOffset) {
         val firstDate = weekDays.firstOrNull()?.dateStr ?: return@LaunchedEffect
         val lastDate = weekDays.lastOrNull()?.dateStr ?: return@LaunchedEffect
-        val hasLessons = weekDays.any { weekSchedule[it.dateStr]?.isNotEmpty() == true }
-        if (!hasLessons) {
+        val isAlreadyCached = weekDays.all { weekSchedule.containsKey(it.dateStr) }
+        if (!isAlreadyCached) {
             viewModel.loadScheduleForDates(firstDate, lastDate)
         }
     }
@@ -171,10 +172,13 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
         }
     }
 
-    var selectedDayIndex by remember { mutableIntStateOf(defaultSelectedDayIndex) }
+    var selectedDayIndex by rememberSaveable { mutableIntStateOf(defaultSelectedDayIndex) }
+    var userManuallySelectedDay by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(defaultSelectedDayIndex) {
-        selectedDayIndex = defaultSelectedDayIndex
+        if (!userManuallySelectedDay) {
+            selectedDayIndex = defaultSelectedDayIndex
+        }
     }
 
     ExpressivePullToRefreshBox(
@@ -230,6 +234,7 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
                                 IconButton(
                                     onClick = {
                                         weekOffset--
+                                        userManuallySelectedDay = true
                                         selectedDayIndex = 0
                                     },
                                     modifier = Modifier.size(28.dp)
@@ -244,6 +249,7 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
                                 IconButton(
                                     onClick = {
                                         weekOffset++
+                                        userManuallySelectedDay = true
                                         selectedDayIndex = 0
                                     },
                                     modifier = Modifier.size(28.dp)
@@ -267,6 +273,7 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
                                         .clip(PillShape)
                                         .expressiveBounceClick {
                                             weekOffset = if (isNextWeekAuto) 1 else 0
+                                            userManuallySelectedDay = false
                                             selectedDayIndex = defaultSelectedDayIndex
                                         }
                                 ) {
@@ -349,6 +356,7 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
                                         .clickable {
                                             if (!isSelected) {
                                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                userManuallySelectedDay = true
                                                 selectedDayIndex = day.dayIndex
                                             }
                                         },

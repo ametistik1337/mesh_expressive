@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +46,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val uriHandler = LocalUriHandler.current
     val profile by viewModel.studentProfile.collectAsState()
     val isCompactSchedule by viewModel.isCompactSchedule.collectAsState()
     val showWeightedGpa by viewModel.showWeightedGpa.collectAsState()
@@ -765,9 +767,43 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    uriHandler.openUri("https://github.com/borichdev/mesh_expressive")
+                                } catch (_: Exception) {}
+                            },
+                            shape = PillShape,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("GitHub Форк", style = MaterialTheme.typography.labelSmall)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    uriHandler.openUri("https://github.com/ametistik1337/mesh_expressive")
+                                } catch (_: Exception) {}
+                            },
+                            shape = PillShape,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFFE91E63))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Оригинал", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "semi vibecoded by gemini",
+                        text = "Форк: borichdev • Оригинальный автор: ametistik1337",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)

@@ -775,10 +775,12 @@ class MeshRepository(val sessionManager: SessionManager) {
                     }
 
                     if (eventMap.isNotEmpty()) {
-                        _weekSchedule.value = eventMap
-                        sessionManager.cachedWeekSchedule = eventMap
-                        _scheduleToday.value = eventMap[todayStr].orEmpty()
-                        _scheduleTomorrow.value = eventMap[tomorrowStr].orEmpty()
+                        val merged = _weekSchedule.value.toMutableMap()
+                        merged.putAll(eventMap)
+                        _weekSchedule.value = merged
+                        sessionManager.cachedWeekSchedule = merged
+                        _scheduleToday.value = merged[todayStr].orEmpty()
+                        _scheduleTomorrow.value = merged[tomorrowStr].orEmpty()
                         sessionManager.cachedScheduleToday = _scheduleToday.value
                         sessionManager.cachedScheduleTomorrow = _scheduleTomorrow.value
                     }
@@ -945,7 +947,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                 val rawMarksMap = mutableMapOf<String, MarkByDateItemDTO>()
                 try {
                     val rawMarksResp = MeshNetworkClient.familyMobileApi.getMarks(
-                        bearerToken, dynamicProfileId, "familymp", "diary-mobile", dynamicStudentId, "2026-08-01", todayStr
+                        bearerToken, dynamicProfileId, "familymp", "diary-mobile", dynamicStudentId, ru.mesh.expressive.util.DateUtils.getAcademicYearStart(), todayStr
                     )
                     if (rawMarksResp.isSuccessful && rawMarksResp.body()?.payload != null) {
                         rawMarksResp.body()!!.payload.orEmpty().forEach { rm ->
@@ -1441,8 +1443,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                     subsystem = "familymp",
                     clientType = "diary-mobile",
                     studentId = dynamicStudentId,
-                    from = "2026-08-01",
-                    to = "2027-06-30"
+                    from = ru.mesh.expressive.util.DateUtils.getAcademicYearStart(),
+                    to = ru.mesh.expressive.util.DateUtils.getAcademicYearEnd()
                 )
                 if (attResp.isSuccessful && attResp.body() != null) {
                     val attDto = attResp.body()!!
@@ -1521,7 +1523,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                 }
 
                 if (records.isNotEmpty()) {
-                    val currentYearRecords = records.filter { it.startDate >= "2026-08-01" }
+                    val currentYearRecords = records.filter { it.startDate >= ru.mesh.expressive.util.DateUtils.getAcademicYearStart() }
                     updateMergedAttendance(emias = currentYearRecords)
                 }
             }
@@ -2865,13 +2867,27 @@ class MeshRepository(val sessionManager: SessionManager) {
                     currentDayLessons.add(lessonItem)
                 }
 
-                if (eventMap.isNotEmpty()) {
-                    val updated = _weekSchedule.value.toMutableMap()
-                    updated.putAll(eventMap)
-                    _weekSchedule.value = updated
-                    sessionManager.cachedWeekSchedule = updated
-                    return@withContext true
-                }
+                val updated = _weekSchedule.value.toMutableMap()
+                try {
+                    val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    val curD = sdfDate.parse(beginDate)
+                    val endD = sdfDate.parse(endDate)
+                    if (curD != null && endD != null) {
+                        val walkCal = java.util.Calendar.getInstance().apply { time = curD }
+                        while (!walkCal.time.after(endD)) {
+                            val dStr = sdfDate.format(walkCal.time)
+                            if (!eventMap.containsKey(dStr) && !updated.containsKey(dStr)) {
+                                updated[dStr] = emptyList()
+                            }
+                            walkCal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                updated.putAll(eventMap)
+                _weekSchedule.value = updated
+                sessionManager.cachedWeekSchedule = updated
+                return@withContext true
             }
         } catch (_: Exception) {}
         false

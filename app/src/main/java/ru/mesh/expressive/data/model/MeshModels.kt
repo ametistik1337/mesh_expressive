@@ -66,8 +66,8 @@ data class LessonScheduleItem(
             if (!pDate.isNullOrBlank()) {
                 return pDate < todayStr
             }
-            val mDate = date.substringBefore("T")?.trim()
-            if (!mDate.isNullOrBlank()) {
+            val mDate = date.substringBefore("T").trim()
+            if (mDate.isNotBlank()) {
                 try {
                     val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
                     val d = sdf.parse(mDate)
@@ -500,8 +500,8 @@ data class MarkItem(
             if (!pDate.isNullOrBlank()) {
                 return pDate < todayStr
             }
-            val mDate = date.substringBefore("T")?.trim()
-            if (!mDate.isNullOrBlank()) {
+            val mDate = date.substringBefore("T").trim()
+            if (mDate.isNotBlank()) {
                 try {
                     val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
                     val d = sdf.parse(mDate)

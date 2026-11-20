@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -211,6 +212,6 @@ private fun getFileVisuals(extension: String): Pair<ImageVector, Color> {
         "ppt", "pptx" -> Icons.Default.Slideshow to Color(0xFFFB8C00)
         "zip", "rar", "7z", "tar", "gz" -> Icons.Default.FolderZip to Color(0xFF8E24AA)
         "png", "jpg", "jpeg", "webp", "gif" -> Icons.Default.Image to Color(0xFF00ACC1)
-        else -> Icons.Default.InsertDriveFile to Color(0xFF5C6BC0)
+        else -> Icons.AutoMirrored.Filled.InsertDriveFile to Color(0xFF5C6BC0)
     }
 }
