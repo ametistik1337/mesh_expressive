@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 
 import ru.mesh.expressive.data.local.SessionManager
 import ru.mesh.expressive.data.model.*
+import ru.mesh.expressive.data.remote.GitHubReleaseInfo
+import ru.mesh.expressive.data.remote.GitHubUpdateManager
 import ru.mesh.expressive.data.repository.AutoCompleteResult
 import ru.mesh.expressive.data.repository.MeshRepository
 
@@ -73,6 +75,17 @@ class MeshMainViewModel(
 
     private val _hapticFeedbackEnabled = MutableStateFlow(sessionManager.hapticFeedbackEnabled)
     val hapticFeedbackEnabled: StateFlow<Boolean> = _hapticFeedbackEnabled.asStateFlow()
+
+    private val gitHubUpdateManager = GitHubUpdateManager()
+
+    private val _isAutoUpdatesAndCounterEnabled = MutableStateFlow(sessionManager.isAutoUpdatesAndCounterEnabled)
+    val isAutoUpdatesAndCounterEnabled: StateFlow<Boolean> = _isAutoUpdatesAndCounterEnabled.asStateFlow()
+
+    private val _availableUpdate = MutableStateFlow<GitHubReleaseInfo?>(null)
+    val availableUpdate: StateFlow<GitHubReleaseInfo?> = _availableUpdate.asStateFlow()
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
 
     private val _hideCompletedHomework = MutableStateFlow(sessionManager.hideCompletedHomework)
     val hideCompletedHomework: StateFlow<Boolean> = _hideCompletedHomework.asStateFlow()
@@ -208,6 +221,46 @@ class MeshMainViewModel(
         sessionManager.marksViewMode = mode.name
     }
 
+    val oauthManager = ru.mesh.expressive.data.remote.OAuthManager(sessionManager)
+
+    private val _isOAuthLoading = MutableStateFlow(false)
+    val isOAuthLoading: StateFlow<Boolean> = _isOAuthLoading.asStateFlow()
+
+    private val _oAuthError = MutableStateFlow<String?>(null)
+    val oAuthError: StateFlow<String?> = _oAuthError.asStateFlow()
+
+    fun startOAuthLogin(context: android.content.Context) {
+        _isOAuthLoading.value = true
+        _oAuthError.value = null
+        viewModelScope.launch {
+            val res = oauthManager.startAuthFlow(context)
+            if (res.isFailure) {
+                _isOAuthLoading.value = false
+                _oAuthError.value = res.exceptionOrNull()?.localizedMessage ?: "Не удалось открыть браузер для авторизации"
+            }
+        }
+    }
+
+    fun handleAuthDeepLink(uri: android.net.Uri, onSuccess: () -> Unit = {}) {
+        _isOAuthLoading.value = true
+        _oAuthError.value = null
+        viewModelScope.launch {
+            val res = oauthManager.handleAuthRedirect(uri)
+            _isOAuthLoading.value = false
+            res.onSuccess { token ->
+                saveAuthToken(token)
+                onSuccess()
+            }.onFailure { err ->
+                _oAuthError.value = err.localizedMessage ?: "Ошибка авторизации"
+            }
+        }
+    }
+
+    fun resetOAuthState() {
+        _isOAuthLoading.value = false
+        _oAuthError.value = null
+    }
+
     private val _isTokenRefreshing = MutableStateFlow(false)
     val isTokenRefreshing: StateFlow<Boolean> = _isTokenRefreshing.asStateFlow()
 
@@ -221,10 +274,22 @@ class MeshMainViewModel(
         if (!sessionManager.isLoggedIn || _isTokenRefreshing.value) return
         _isTokenRefreshing.value = true
         _isTokenRefreshOverlayDismissed.value = false
+        viewModelScope.launch {
+            val res = oauthManager.refreshTokens()
+            res.onSuccess { newToken ->
+                onTokenRefreshSuccess(newToken)
+            }.onFailure {
+                onTokenRefreshFailed()
+            }
+        }
     }
 
     fun dismissTokenRefreshOverlay() {
+        _isTokenRefreshing.value = false
         _isTokenRefreshOverlayDismissed.value = true
+        _showReAuthDialog.value = false
+        _currentTab.value = MainTab.DASHBOARD
+        repository.loadCachedData()
     }
 
     fun onTokenRefreshSuccess(newToken: String) {
@@ -238,10 +303,13 @@ class MeshMainViewModel(
         _isTokenRefreshing.value = false
         _isTokenRefreshOverlayDismissed.value = false
         _showReAuthDialog.value = true
+        repository.loadCachedData()
     }
 
     fun dismissReAuthDialog() {
         _showReAuthDialog.value = false
+        _currentTab.value = MainTab.DASHBOARD
+        repository.loadCachedData()
     }
 
     init {
@@ -259,6 +327,77 @@ class MeshMainViewModel(
         }
         if (sessionManager.isLoggedIn) {
             refreshData()
+        }
+        if (sessionManager.isAutoUpdatesAndCounterEnabled) {
+            triggerBackgroundUpdateAndCounterCheck()
+        }
+    }
+
+    fun triggerBackgroundUpdateAndCounterCheck() {
+        viewModelScope.launch {
+            try {
+                val release = gitHubUpdateManager.checkForUpdates()
+                if (release != null && release.tagName != sessionManager.dismissedUpdateVersion) {
+                    _availableUpdate.value = release
+                }
+            } catch (_: Exception) {}
+
+            try {
+                val now = System.currentTimeMillis()
+                if (now - sessionManager.lastCounterPingTimestamp >= 24 * 60 * 60 * 1000L) {
+                    val schedules = sessionManager.cachedPeriodsSchedules.orEmpty()
+                    val vacDates = schedules.filter { it.type == "vacation" || it.title.contains("каникул", ignoreCase = true) }
+                        .map { it.date }
+                    val success = gitHubUpdateManager.syncActiveCounter(sessionManager.anonymousInstallId, vacDates)
+                    if (success) {
+                        sessionManager.lastCounterPingTimestamp = now
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun toggleAutoUpdatesAndCounter(enabled: Boolean) {
+        sessionManager.isAutoUpdatesAndCounterEnabled = enabled
+        _isAutoUpdatesAndCounterEnabled.value = enabled
+        if (enabled) {
+            triggerBackgroundUpdateAndCounterCheck()
+        }
+    }
+
+    fun checkForUpdatesManual(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        if (_isCheckingUpdate.value) return
+        _isCheckingUpdate.value = true
+        viewModelScope.launch {
+            try {
+                val release = gitHubUpdateManager.checkForUpdates()
+                _isCheckingUpdate.value = false
+                if (release != null) {
+                    _availableUpdate.value = release
+                    onResult(true, "Найдено обновление: ${release.tagName}")
+                } else {
+                    onResult(false, "У вас установлена последняя версия")
+                }
+            } catch (e: Exception) {
+                _isCheckingUpdate.value = false
+                onResult(false, "Ошибка проверки: ${e.localizedMessage ?: "нет сети"}")
+            }
+        }
+    }
+
+    fun dismissUpdateDialog(skipThisVersion: Boolean = false) {
+        val current = _availableUpdate.value
+        if (skipThisVersion && current != null) {
+            sessionManager.dismissedUpdateVersion = current.tagName
+        }
+        _availableUpdate.value = null
+    }
+
+    fun completeOnboardingGuide() {
+        sessionManager.isOnboardingCompleted = true
+        _showOnboardingGuide.value = false
+        if (sessionManager.isAutoUpdatesAndCounterEnabled) {
+            triggerBackgroundUpdateAndCounterCheck()
         }
     }
 
@@ -286,11 +425,6 @@ class MeshMainViewModel(
 
     val currentAuthToken: String?
         get() = sessionManager.authToken
-
-    fun completeOnboardingGuide() {
-        sessionManager.isOnboardingCompleted = true
-        _showOnboardingGuide.value = false
-    }
 
     fun restartOnboardingGuide() {
         _showOnboardingGuide.value = true

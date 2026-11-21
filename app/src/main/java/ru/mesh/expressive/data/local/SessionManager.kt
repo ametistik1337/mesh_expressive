@@ -19,6 +19,34 @@ class SessionManager(context: Context) {
         get() = authToken
         set(value) { authToken = value }
 
+    var oauthClientId: String?
+        get() = prefs.getString("oauth_client_id", null)
+        set(value) = prefs.edit().putString("oauth_client_id", value).apply()
+
+    var oauthClientSecret: String?
+        get() = prefs.getString("oauth_client_secret", null)
+        set(value) = prefs.edit().putString("oauth_client_secret", value).apply()
+
+    var oauthCodeVerifier: String?
+        get() = prefs.getString("oauth_code_verifier", null)
+        set(value) = prefs.edit().putString("oauth_code_verifier", value).apply()
+
+    var oauthState: String?
+        get() = prefs.getString("oauth_state", null)
+        set(value) = prefs.edit().putString("oauth_state", value).apply()
+
+    var mosAccessToken: String?
+        get() = prefs.getString("mos_access_token", null)
+        set(value) = prefs.edit().putString("mos_access_token", value).apply()
+
+    var mosRefreshToken: String?
+        get() = prefs.getString("mos_refresh_token", null)
+        set(value) = prefs.edit().putString("mos_refresh_token", value).apply()
+
+    var meshRefreshToken: String?
+        get() = prefs.getString("mesh_refresh_token", null)
+        set(value) = prefs.edit().putString("mesh_refresh_token", value).apply()
+
     var personId: Long
         get() = prefs.getLong("person_id", 0L)
         set(value) = prefs.edit().putLong("person_id", value).apply()
@@ -82,6 +110,29 @@ class SessionManager(context: Context) {
     var isOnboardingCompleted: Boolean
         get() = prefs.getBoolean("is_onboarding_completed", false)
         set(value) = prefs.edit().putBoolean("is_onboarding_completed", value).apply()
+
+    var isAutoUpdatesAndCounterEnabled: Boolean
+        get() = prefs.getBoolean("is_auto_updates_counter_enabled", true)
+        set(value) = prefs.edit().putBoolean("is_auto_updates_counter_enabled", value).apply()
+
+    var anonymousInstallId: String
+        get() {
+            var id = prefs.getString("anon_install_id", null)
+            if (id.isNullOrBlank()) {
+                id = java.util.UUID.randomUUID().toString().replace("-", "").take(12)
+                prefs.edit().putString("anon_install_id", id).apply()
+            }
+            return id
+        }
+        set(value) = prefs.edit().putString("anon_install_id", value).apply()
+
+    var lastCounterPingTimestamp: Long
+        get() = prefs.getLong("last_counter_ping_ts", 0L)
+        set(value) = prefs.edit().putLong("last_counter_ping_ts", value).apply()
+
+    var dismissedUpdateVersion: String
+        get() = prefs.getString("dismissed_update_version", "") ?: ""
+        set(value) = prefs.edit().putString("dismissed_update_version", value).apply()
 
     var marksViewMode: String
         get() = prefs.getString("marks_view_mode", "BY_SUBJECT") ?: "BY_SUBJECT"
@@ -199,7 +250,19 @@ class SessionManager(context: Context) {
         set(value) = saveJson("cached_portfolio_achievements", value)
 
     fun logout() {
-        prefs.edit().remove("auth_token").apply()
+        prefs.edit()
+            .remove("auth_token")
+            .remove("profile_id")
+            .remove("person_id")
+            .remove("student_id")
+            .remove("class_uid")
+            .remove("class_unit_id")
+            .remove("mos_access_token")
+            .remove("mos_refresh_token")
+            .remove("mesh_refresh_token")
+            .remove("oauth_code_verifier")
+            .remove("oauth_state")
+            .apply()
         clearCache()
     }
 

@@ -55,7 +55,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import ru.mesh.expressive.data.local.SessionManager
 import ru.mesh.expressive.data.repository.MeshRepository
-import ru.mesh.expressive.ui.components.BackgroundTokenRefreshWebView
 import ru.mesh.expressive.ui.components.TokenRefreshOverlay
 import ru.mesh.expressive.ui.components.ReAuthDialog
 
@@ -66,6 +65,20 @@ import ru.mesh.expressive.ui.viewmodel.MainTab
 import ru.mesh.expressive.ui.viewmodel.MeshMainViewModel
 
 class MainActivity : ComponentActivity() {
+    private var viewModelRef: MeshMainViewModel? = null
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDeepLink(intent)
+    }
+
+    private fun handleDeepLink(intent: android.content.Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme == "dnevnik-mes") {
+            viewModelRef?.handleAuthDeepLink(uri)
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -115,6 +128,10 @@ class MainActivity : ComponentActivity() {
             val mainViewModel: MeshMainViewModel = viewModel(
                 factory = MeshMainViewModel.Factory(repository, sessionManager)
             )
+            viewModelRef = mainViewModel
+            LaunchedEffect(Unit) {
+                handleDeepLink(intent)
+            }
 
             val themeMode by mainViewModel.themeMode.collectAsState()
             val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -164,6 +181,8 @@ fun MeshMainApp(
     val isTokenRefreshing by viewModel.isTokenRefreshing.collectAsState()
     val isTokenRefreshOverlayDismissed by viewModel.isTokenRefreshOverlayDismissed.collectAsState()
     val showReAuthDialog by viewModel.showReAuthDialog.collectAsState()
+    val isAutoUpdatesAndCounterEnabled by viewModel.isAutoUpdatesAndCounterEnabled.collectAsState()
+    val availableUpdate by viewModel.availableUpdate.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     val profile by viewModel.studentProfile.collectAsState()
@@ -724,24 +743,30 @@ fun MeshMainApp(
                 menuRect = menuTargetRect,
                 profileRect = profileTargetRect,
                 dockRect = dockTargetRect,
+                initialUpdatesEnabled = isAutoUpdatesAndCounterEnabled,
+                onUpdatesEnabledChange = { viewModel.toggleAutoUpdatesAndCounter(it) },
                 onDismiss = { viewModel.completeOnboardingGuide() }
             )
         }
 
-        if (isTokenRefreshing) {
-            BackgroundTokenRefreshWebView(
-                onTokenAcquired = { newToken ->
-                    viewModel.onTokenRefreshSuccess(newToken)
-                },
-                onError = {
-                    viewModel.onTokenRefreshFailed()
+        availableUpdate?.let { release ->
+            ru.mesh.expressive.ui.components.UpdateAvailableDialog(
+                releaseInfo = release,
+                onDismiss = { viewModel.dismissUpdateDialog(skipThisVersion = true) },
+                onUpdate = { targetUrl ->
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(targetUrl))
+                        context.startActivity(intent)
+                    } catch (_: Exception) {}
+                    viewModel.dismissUpdateDialog(skipThisVersion = false)
                 }
             )
-            if (!isTokenRefreshOverlayDismissed) {
-                TokenRefreshOverlay(
-                    onDismiss = { viewModel.dismissTokenRefreshOverlay() }
-                )
-            }
+        }
+
+        if (isTokenRefreshing && !isTokenRefreshOverlayDismissed) {
+            TokenRefreshOverlay(
+                onDismiss = { viewModel.dismissTokenRefreshOverlay() }
+            )
         }
 
         if (showReAuthDialog) {

@@ -1,17 +1,5 @@
 package ru.mesh.expressive.ui.screens
 
-import android.annotation.SuppressLint
-import android.graphics.Bitmap
-import android.net.http.SslError
-import android.view.ViewGroup
-import android.webkit.CookieManager
-import android.webkit.SslErrorHandler
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -30,28 +18,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.launch
 import ru.mesh.expressive.data.local.RootTokenExtractor
-import ru.mesh.expressive.data.local.TokenUtils
 import ru.mesh.expressive.ui.components.M3CircularWavyLoader
-import ru.mesh.expressive.ui.components.M3WavyProgressIndicator
 import ru.mesh.expressive.ui.theme.*
 import ru.mesh.expressive.ui.viewmodel.MeshMainViewModel
 
-private const val MOS_RU_AUTH_URL = "https://school.mos.ru/v3/auth/sudir/login"
-
 enum class AuthScreenState {
-    WELCOME_LANDING, WEB_MOS_RU, ROOT_AND_MANUAL_TOKEN
+    WELCOME_LANDING, OAUTH_WAITING, ROOT_AND_MANUAL_TOKEN
 }
 
-@SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthScreen(
@@ -61,25 +42,22 @@ fun AuthScreen(
     val context = LocalContext.current
     var screenState by remember { mutableStateOf(AuthScreenState.WELCOME_LANDING) }
     var manualToken by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var webProgress by remember { mutableFloatStateOf(0.1f) }
-    var currentUrl by remember { mutableStateOf(MOS_RU_AUTH_URL) }
-    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var isExtractingRoot by remember { mutableStateOf(false) }
     var rootDialogMessage by remember { mutableStateOf<String?>(null) }
-    var detectedWebToken by remember { mutableStateOf<String?>(null) }
-    var showMosRuGuideDialog by remember { mutableStateOf(false) }
     var showHowItWorksDialog by remember { mutableStateOf(false) }
+
+    val isOAuthLoading by viewModel.isOAuthLoading.collectAsState()
+    val oAuthError by viewModel.oAuthError.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
-            if (screenState != AuthScreenState.WELCOME_LANDING) {
+            if (screenState != AuthScreenState.WELCOME_LANDING || viewModel.sessionManager.isLoggedIn) {
                 CenterAlignedTopAppBar(
                     title = {
                         Text(
                             text = when (screenState) {
-                                AuthScreenState.WEB_MOS_RU -> "Вход через mos.ru"
+                                AuthScreenState.OAUTH_WAITING -> "Вход через mos.ru"
                                 AuthScreenState.ROOT_AND_MANUAL_TOKEN -> "Импорт токена"
                                 else -> "Вход в МЭШ"
                             },
@@ -87,29 +65,20 @@ fun AuthScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = { screenState = AuthScreenState.WELCOME_LANDING }) {
+                        IconButton(onClick = {
+                            if (screenState != AuthScreenState.WELCOME_LANDING) {
+                                viewModel.resetOAuthState()
+                                screenState = AuthScreenState.WELCOME_LANDING
+                            } else {
+                                onAuthSuccess()
+                            }
+                        }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                         }
                     },
                     actions = {
-                        if (screenState == AuthScreenState.WEB_MOS_RU) {
-                            IconButton(onClick = { showMosRuGuideDialog = true }) {
-                                Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = "Инструкция")
-                            }
-                            IconButton(onClick = {
-                                val cm = CookieManager.getInstance()
-                                cm.removeAllCookies(null)
-                                cm.flush()
-                                detectedWebToken = null
-                                webViewInstance?.clearCache(true)
-                                webViewInstance?.loadUrl(MOS_RU_AUTH_URL)
-                                android.widget.Toast.makeText(context, "Куки очищены. Повторите вход.", android.widget.Toast.LENGTH_SHORT).show()
-                            }) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = "Очистить куки")
-                            }
-                            IconButton(onClick = { webViewInstance?.reload() }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Обновить")
-                            }
+                        IconButton(onClick = { showHowItWorksDialog = true }) {
+                            Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = "Инструкция")
                         }
                     }
                 )
@@ -130,155 +99,24 @@ fun AuthScreen(
                     AuthScreenState.WELCOME_LANDING -> {
                         WelcomeLandingView(
                             onLoginMosRuClick = {
-                                screenState = AuthScreenState.WEB_MOS_RU
+                                screenState = AuthScreenState.OAUTH_WAITING
+                                viewModel.startOAuthLogin(context)
                             },
                             onRootTokenClick = { screenState = AuthScreenState.ROOT_AND_MANUAL_TOKEN },
                             onContinueDemoClick = onAuthSuccess
                         )
                     }
 
-                    AuthScreenState.WEB_MOS_RU -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.White)
-                        ) {
-                            AndroidView(
-                                factory = { ctx ->
-                                    WebView(ctx).apply {
-                                        setBackgroundColor(android.graphics.Color.WHITE)
-                                        layoutParams = ViewGroup.LayoutParams(
-                                            ViewGroup.LayoutParams.MATCH_PARENT,
-                                            ViewGroup.LayoutParams.MATCH_PARENT
-                                        )
-
-                                        val cookieManager = CookieManager.getInstance()
-                                        cookieManager.setAcceptCookie(true)
-                                        cookieManager.setAcceptThirdPartyCookies(this, true)
-
-                                        settings.apply {
-                                            javaScriptEnabled = true
-                                            domStorageEnabled = true
-                                            databaseEnabled = true
-                                            allowFileAccess = true
-                                            allowContentAccess = true
-                                            loadWithOverviewMode = true
-                                            useWideViewPort = true
-                                            setSupportMultipleWindows(true)
-                                            javaScriptCanOpenWindowsAutomatically = true
-                                            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                            cacheMode = WebSettings.LOAD_DEFAULT
-                                            userAgentString = "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro Build/TD1A.220804.031) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
-                                        }
-
-                                        webChromeClient = object : WebChromeClient() {
-                                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                                                webProgress = newProgress / 100f
-                                                if (newProgress >= 100) isLoading = false
-                                            }
-                                        }
-
-                                        webViewClient = object : WebViewClient() {
-                                            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
-                                                handler?.proceed()
-                                            }
-
-                                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                                                return false
-                                            }
-
-                                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                                super.onPageStarted(view, url, favicon)
-                                                isLoading = true
-                                                url?.let { currentUrl = it }
-                                            }
-
-                                            override fun onPageFinished(view: WebView?, url: String?) {
-                                                super.onPageFinished(view, url)
-                                                isLoading = false
-                                                url?.let {
-                                                    currentUrl = it
-                                                    val c1 = cookieManager.getCookie("https://school.mos.ru/") ?: ""
-                                                    val c2 = cookieManager.getCookie("https://mos.ru/") ?: ""
-                                                    val c3 = cookieManager.getCookie(it) ?: ""
-                                                    val allCookies = "$c1; $c2; $c3"
-
-                                                    val extracted = TokenUtils.extractValidTokenFromCookies(allCookies)
-                                                    if (!extracted.isNullOrBlank()) {
-                                                        detectedWebToken = extracted
-                                                        val isMeshDomain = it.contains("school.mos.ru") || it.contains("dnevnik.mos.ru") || it.contains("myschool.mos.ru")
-                                                        if (isMeshDomain) {
-                                                            cookieManager.flush()
-                                                            coroutineScope.launch {
-                                                                viewModel.saveAuthToken(extracted)
-                                                                onAuthSuccess()
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                                                super.onReceivedError(view, request, error)
-                                                isLoading = false
-                                            }
-                                        }
-                                        loadUrl(MOS_RU_AUTH_URL)
-                                        webViewInstance = this
-                                    }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
-
-                            if (isLoading) {
-                                M3WavyProgressIndicator(
-                                    progress = webProgress,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .align(Alignment.TopCenter)
-                                )
+                    AuthScreenState.OAUTH_WAITING -> {
+                        OAuthWaitingView(
+                            isLoading = isOAuthLoading,
+                            error = oAuthError,
+                            onRetry = { viewModel.startOAuthLogin(context) },
+                            onCancel = {
+                                viewModel.resetOAuthState()
+                                screenState = AuthScreenState.WELCOME_LANDING
                             }
-
-                            // Persistent Confirmation Button
-                            Button(
-                                onClick = {
-                                    val cm = CookieManager.getInstance()
-                                    val c1 = cm.getCookie("https://school.mos.ru/") ?: ""
-                                    val c2 = cm.getCookie("https://mos.ru/") ?: ""
-                                    val c3 = cm.getCookie(currentUrl) ?: ""
-                                    val allCookies = "$c1; $c2; $c3"
-
-                                    val token = detectedWebToken?.takeIf { TokenUtils.isTokenValidAndNotExpired(it) }
-                                        ?: TokenUtils.extractValidTokenFromCookies(allCookies)
-
-                                    if (token != null) {
-                                        cm.flush()
-                                        coroutineScope.launch {
-                                            viewModel.saveAuthToken(token)
-                                            onAuthSuccess()
-                                        }
-                                    } else {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "Сессия ещё не готова. Пожалуйста, выполните вход на mos.ru.",
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(20.dp)
-                                    .fillMaxWidth(),
-                                shape = PillShape,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary
-                                )
-                            ) {
-                                Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Подтвердить вход в дневник")
-                            }
-                        }
+                        )
                     }
 
                     AuthScreenState.ROOT_AND_MANUAL_TOKEN -> {
@@ -390,7 +228,7 @@ fun AuthScreen(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Вставьте JWT токен (Bearer eyJ...) или session-cookie вручную.",
+                                        text = "Вставьте JWT токен (Bearer eyJ...) или auth_token вручную.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -462,99 +300,6 @@ fun AuthScreen(
         )
     }
 
-    if (showMosRuGuideDialog) {
-        AlertDialog(
-            onDismissRequest = { showMosRuGuideDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.VpnKey,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = "Вход через mos.ru",
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-            },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "1. Войдите в свой аккаунт на странице mos.ru.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "2. Как только появится страница дневника или белый экран — нажмите кнопку «Подтвердить вход в дневник» внизу экрана.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.VpnLock,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Если не грузится — отключите VPN (нужно только для входа).",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    TextButton(
-                        onClick = { showHowItWorksDialog = true },
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Как это работает?",
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showMosRuGuideDialog = false },
-                    shape = PillShape,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Понятно")
-                }
-            }
-        )
-    }
-
     if (showHowItWorksDialog) {
         AlertDialog(
             onDismissRequest = { showHowItWorksDialog = false },
@@ -568,7 +313,7 @@ fun AuthScreen(
             },
             title = {
                 Text(
-                    text = "Как это работает?",
+                    text = "Как работает вход?",
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
@@ -582,23 +327,23 @@ fun AuthScreen(
                 ) {
                     HowItWorksInfoItem(
                         number = "1",
-                        title = "Вход в свой аккаунт",
-                        description = "Вы вводите логин и пароль прямо на официальной странице mos.ru через государственную систему СУДИР. Пароли не передаются приложению."
+                        title = "Официальный OAuth 2.0 PKCE",
+                        description = "Вход происходит через системный браузер (Chrome Custom Tabs). Ваши пароли вводятся только на защищенной странице mos.ru."
                     )
                     HowItWorksInfoItem(
                         number = "2",
-                        title = "Страница дневника или белый экран",
-                        description = "После ввода пароля и СМС mos.ru перенаправит вас на школьный портал. Страница может остаться белой или показать дневник — это значит, что сессия успешно создана. Просто нажмите внизу кнопку «Подтвердить вход в дневник»."
+                        title = "Поддержка автозаполнения и биометрии",
+                        description = "В браузере работают все ваши сохраненные пароли Google Chrome, ключи доступа (Passkeys) и двухфакторная аутентификация."
                     )
                     HowItWorksInfoItem(
                         number = "3",
-                        title = "Почему мешает VPN?",
-                        description = "Серверы mos.ru блокируют зарубежные IP-адреса для защиты от атак. Если страница зависла или выдает ошибку, выключите VPN только на время авторизации. Сразу после входа VPN можно включить обратно."
+                        title = "Мгновенный автоматический возврат",
+                        description = "После подтверждения входа браузер автоматически передает код приложению и возвращает вас в дневник."
                     )
                     HowItWorksInfoItem(
                         number = "4",
                         title = "0 трекеров и открытость",
-                        description = "Приложение сохраняет полученный ключ сессии только на вашем телефоне. Никакой аналитики Яндекса, рекламы или слежки."
+                        description = "Ключ сессии сохраняется строго локально на вашем устройстве. Никаких серверов-посредников, рекламы или слежки."
                     )
                 }
             },
@@ -612,6 +357,102 @@ fun AuthScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun OAuthWaitingView(
+    @Suppress("UNUSED_PARAMETER") isLoading: Boolean,
+    error: String?,
+    onRetry: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ExpressiveCardShape,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (error == null) {
+                    M3CircularWavyLoader(size = 56.dp, color = MaterialTheme.colorScheme.primary)
+
+                    Text(
+                        text = "Ожидание авторизации",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Text(
+                        text = "В открывшемся окне браузера выполните вход на mos.ru. После завершения вы автоматически вернетесь в приложение.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.ErrorOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(48.dp)
+                    )
+
+                    Text(
+                        text = "Ошибка авторизации",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        shape = PillShape,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Отмена")
+                    }
+
+                    Button(
+                        onClick = onRetry,
+                        shape = PillShape,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (error != null) "Повторить" else "Открыть снова")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -856,5 +697,3 @@ private fun WelcomeFeatureRow(
         }
     }
 }
-
-

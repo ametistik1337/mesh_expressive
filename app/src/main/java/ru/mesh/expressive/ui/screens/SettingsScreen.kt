@@ -59,6 +59,8 @@ fun SettingsScreen(
     val startTab by viewModel.startTab.collectAsState()
     val hapticFeedbackEnabled by viewModel.hapticFeedbackEnabled.collectAsState()
     val hideCompletedHomework by viewModel.hideCompletedHomework.collectAsState()
+    val isAutoUpdatesAndCounterEnabled by viewModel.isAutoUpdatesAndCounterEnabled.collectAsState()
+    val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
 
     var showTokenDialog by remember { mutableStateOf(false) }
     var showResetConfirmDialog by remember { mutableStateOf(false) }
@@ -690,6 +692,38 @@ fun SettingsScreen(
                     ) {
                         Text("Очистить")
                     }
+                }
+            }
+        }
+
+        // Section: Обновления и счётчик
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = ExpressiveCardShape,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    SettingsToggleRow(
+                        icon = Icons.Default.CloudSync,
+                        title = "Автообновления и счётчик",
+                        subtitle = "Проверка новых релизов на GitHub и анонимный счётчик активных пользователей",
+                        isChecked = isAutoUpdatesAndCounterEnabled,
+                        onCheckedChange = { viewModel.toggleAutoUpdatesAndCounter(it) }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    SettingsActionRow(
+                        icon = Icons.Default.SystemUpdate,
+                        title = if (isCheckingUpdate) "Проверка..." else "Проверить обновления",
+                        subtitle = "Свежие сборки и релизы на GitHub",
+                        onClick = {
+                            viewModel.checkForUpdatesManual { hasUpdate, message ->
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
                 }
             }
         }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -132,6 +133,8 @@ fun OnboardingGuideOverlay(
     menuRect: Rect? = null,
     profileRect: Rect? = null,
     dockRect: Rect? = null,
+    initialUpdatesEnabled: Boolean = true,
+    onUpdatesEnabledChange: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val steps = remember {
@@ -153,11 +156,18 @@ fun OnboardingGuideOverlay(
                 description = "Внизу экрана расположен удобный док для быстрого переключения в 1 касание между Главной, Расписанием, ДЗ, Оценками и Подарками.",
                 icon = Icons.Default.Dashboard,
                 arrowDirection = ArrowDirection.BOTTOM_CENTER
+            ),
+            SpotlightGuideStep(
+                title = "Автообновления и счётчик",
+                description = "Проверка новых релизов на GitHub со ссылкой на обновление и анонимный счётчик активных пользователей без сбора персональных данных.",
+                icon = Icons.Default.CloudSync,
+                arrowDirection = ArrowDirection.BOTTOM_CENTER
             )
         )
     }
 
     var currentStepIndex by remember { mutableIntStateOf(0) }
+    var updatesAndCounterEnabled by remember { mutableStateOf(initialUpdatesEnabled) }
     val currentStep = steps[currentStepIndex]
     val isLastStep = currentStepIndex == steps.size - 1
 
@@ -295,17 +305,28 @@ fun OnboardingGuideOverlay(
                 else -> 0.dp
             }
 
-            val bottomCardPadding = if (currentStep.arrowDirection == ArrowDirection.BOTTOM_CENTER) {
-                dockRect?.let { with(density) { (screenHeightPx - it.top + 16.dp.toPx()).toDp() } } ?: 130.dp
+            val bottomCardPadding = when (currentStepIndex) {
+                2 -> dockRect?.let { with(density) { (screenHeightPx - it.top + 16.dp.toPx()).toDp() } } ?: 130.dp
+                else -> 0.dp
+            }
+
+            val cardAlignment = when (currentStepIndex) {
+                3 -> Alignment.Center
+                2 -> Alignment.BottomCenter
+                else -> Alignment.TopCenter
+            }
+
+            val actualShape = if (currentStepIndex == 3) {
+                ru.mesh.expressive.ui.theme.ExpressiveCardShape
             } else {
-                0.dp
+                bubbleShape
             }
 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 20.dp),
-                contentAlignment = if (currentStep.arrowDirection == ArrowDirection.BOTTOM_CENTER) Alignment.BottomCenter else Alignment.TopCenter
+                contentAlignment = cardAlignment
             ) {
             Surface(
                 modifier = Modifier
@@ -319,7 +340,7 @@ fun OnboardingGuideOverlay(
                         indication = null,
                         onClick = {} // Intercept clicks inside card
                     ),
-                shape = bubbleShape,
+                shape = actualShape,
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 16.dp
             ) {
@@ -401,6 +422,45 @@ fun OnboardingGuideOverlay(
                         lineHeight = 21.sp
                     )
 
+                    if (currentStepIndex == 3) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Включить автообновления и счётчик",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "По желанию. Можно отключить в Настройках",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Switch(
+                                    checked = updatesAndCounterEnabled,
+                                    onCheckedChange = {
+                                        updatesAndCounterEnabled = it
+                                        onUpdatesEnabledChange(it)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(18.dp))
 
                     // Step Dots Indicator and Action Buttons
@@ -450,7 +510,7 @@ fun OnboardingGuideOverlay(
                                 shape = PillShape,
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                             ) {
-                                Text(if (isLastStep) "Понятно!" else "Далее", style = MaterialTheme.typography.labelMedium)
+                                Text(if (isLastStep) "Готово" else "Далее", style = MaterialTheme.typography.labelMedium)
                                 if (!isLastStep) {
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(14.dp))

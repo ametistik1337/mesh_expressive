@@ -540,7 +540,7 @@ class MeshRepository(val sessionManager: SessionManager) {
         }
     }
 
-    private fun loadCachedData() {
+    fun loadCachedData() {
         sessionManager.cachedProfile?.let { _studentProfile.value = it }
         sessionManager.cachedWeekSchedule?.let { _weekSchedule.value = it }
         sessionManager.cachedScheduleToday?.let { _scheduleToday.value = it }
