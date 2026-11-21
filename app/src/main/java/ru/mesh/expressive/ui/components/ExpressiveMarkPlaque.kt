@@ -203,52 +203,52 @@ fun ExpressiveMarkPlaque(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Row(
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = displayVal,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = actualFontSize,
-                    color = textColor,
-                    letterSpacing = (-0.5).sp
-                )
-                if (isCorrected && !isPt) {
+            Box(contentAlignment = Alignment.Center) {
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     Text(
-                        text = "*",
+                        text = displayVal,
                         fontWeight = FontWeight.Bold,
-                        fontSize = (actualFontSize.value * 0.85f).sp,
-                        color = textColor.copy(alpha = 0.9f),
-                        modifier = Modifier.padding(start = 0.5.dp)
+                        fontSize = actualFontSize,
+                        color = textColor,
+                        letterSpacing = (-0.5).sp
+                    )
+                    if (isCorrected && !isPt) {
+                        Text(
+                            text = "*",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = (actualFontSize.value * 0.85f).sp,
+                            color = textColor.copy(alpha = 0.9f),
+                            modifier = Modifier.padding(start = 0.5.dp)
+                        )
+                    }
+                    if (weightSuper.isNotEmpty()) {
+                        Text(
+                            text = weightSuper,
+                            fontWeight = FontWeight.Black,
+                            fontSize = (actualFontSize.value * 0.95f).sp,
+                            color = textColor.copy(alpha = 0.95f),
+                            modifier = Modifier.padding(start = 0.5.dp)
+                        )
+                    }
+                }
+                if (isPt) {
+                    val dotColor = if (isExpired) {
+                        if (isDark) Color(0xFFFF5252) else Color(0xFFD32F2F)
+                    } else {
+                        if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 6.dp, y = (-1).dp)
+                            .size(5.5.dp)
+                            .clip(CircleShape)
+                            .background(dotColor)
                     )
                 }
-                if (weightSuper.isNotEmpty()) {
-                    Text(
-                        text = weightSuper,
-                        fontWeight = FontWeight.Black,
-                        fontSize = (actualFontSize.value * 0.95f).sp,
-                        color = textColor.copy(alpha = 0.95f),
-                        modifier = Modifier.padding(start = 0.5.dp)
-                    )
-                }
-            }
-
-            // Индикатор точки в верхнем правом углу
-            if (isPt) {
-                val dotColor = if (isExpired) {
-                    if (isDark) Color(0xFFFF5252) else Color(0xFFD32F2F)
-                } else {
-                    if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
-                }
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 3.dp, end = 3.dp)
-                        .size(5.5.dp)
-                        .clip(CircleShape)
-                        .background(dotColor)
-                )
             }
         }
     }

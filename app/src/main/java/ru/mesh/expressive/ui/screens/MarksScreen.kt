@@ -175,6 +175,13 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
     val activeGpa by viewModel.activeGpa.collectAsState()
     val displayGpa = activeGpa
 
+    val localGpa = remember(displaySubjectSummaries, showWeightedGpa) {
+        val subjAverages = displaySubjectSummaries
+            .map { it.getEffectiveAverage(showWeightedGpa) }
+            .filter { it > 0.0 }
+        if (subjAverages.isNotEmpty()) subjAverages.average() else 0.0
+    }
+
     val periodSubtitle = remember(selectedPeriod) {
         if (selectedPeriod.id == "all") {
             "Все учебные периоды ${ru.mesh.expressive.util.DateUtils.getAcademicYearLabel()} учебного года"
@@ -222,10 +229,15 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Средний балл (МЭШ)",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                        text = if (localGpa > 0.0) {
+                                            "Средний балл (МЭШ) • Локальный: ${String.format(java.util.Locale.US, "%.2f", localGpa)}"
+                                        } else {
+                                            "Средний балл (МЭШ)"
+                                        },
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.62f)
                                     )
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -495,11 +507,29 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                 )
             },
             text = {
-                Text(
-                    text = "Средний балл и рейтинг учащегося подтягиваются напрямую с серверов МЭШ без локальных расчётов.\n\nИз-за особенностей инфраструктуры МЭШ эти данные обновляются централизованно достаточно редко и нестабильно (как правило, один раз в сутки ночью). Свежие оценки, выставленные учителями в течение дня, учитываются сервером с задержкой.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Локальный расчёт",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = if (localGpa > 0.0) {
+                            "Мелкий балл сверху (${String.format(java.util.Locale.US, "%.2f", localGpa)}) рассчитывается локально по выставленным оценкам за выбранный период в реальном времени."
+                        } else {
+                            "Мелкий балл сверху рассчитывается локально по выставленным оценкам за выбранный период в реальном времени."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Text(
+                        text = "Основной средний балл и рейтинг учащегося подтягиваются напрямую с серверов МЭШ.\n\nИз-за особенностей инфраструктуры МЭШ эти данные обновляются централизованно достаточно редко и нестабильно (как правило, один раз в сутки ночью). Свежие оценки, выставленные учителями в течение дня, учитываются сервером с задержкой.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
@@ -905,6 +935,16 @@ fun SubjectMarksCard(
     var isExpanded by remember { mutableStateOf(false) }
 
     val effAvg = subjectSummary.getEffectiveAverage(showWeightedGpa)
+    val validMarks = subjectSummary.marks.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
+    val localAvg = if (validMarks.isNotEmpty()) {
+        if (showWeightedGpa) {
+            val wSum = validMarks.sumOf { it.effectiveValue * it.weight }
+            val wTotal = validMarks.sumOf { it.weight }
+            if (wTotal > 0.0) wSum / wTotal else 0.0
+        } else {
+            validMarks.map { it.effectiveValue }.average()
+        }
+    } else 0.0
     val hasFinalMark = !subjectSummary.finalMark.isNullOrBlank()
     val finalVal = subjectSummary.finalMark.orEmpty()
 
@@ -931,6 +971,7 @@ fun SubjectMarksCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(ExpressiveCardShape)
             .clickable { isExpanded = !isExpanded },
         shape = ExpressiveCardShape,
         colors = CardDefaults.cardColors(
@@ -992,34 +1033,58 @@ fun SubjectMarksCard(
                         }
 
                         if (effAvg > 0.0) {
-                            Surface(
-                                shape = PillShape,
-                                color = MaterialTheme.colorScheme.surfaceVariant,
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier.padding(end = 8.dp)
                             ) {
-                                Text(
-                                    text = String.format(java.util.Locale.US, "%.2f", effAvg),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                if (localAvg > 0.0) {
+                                    Text(
+                                        text = String.format(java.util.Locale.US, "%.2f", localAvg),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                                    )
+                                }
+                                Surface(
+                                    shape = PillShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Text(
+                                        text = String.format(java.util.Locale.US, "%.2f", effAvg),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     } else {
-                        // Текущий средний балл
-                        Surface(
-                            shape = PillShape,
-                            color = markBgColor,
+                        // Текущий средний балл + локально рассчитанный балл сверху
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.padding(end = 8.dp)
                         ) {
-                            Text(
-                                text = if (effAvg > 0.0) String.format(java.util.Locale.US, "%.2f", effAvg) else "—",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = markColor
-                            )
+                            if (localAvg > 0.0) {
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%.2f", localAvg),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                                )
+                            }
+                            Surface(
+                                shape = PillShape,
+                                color = markBgColor
+                            ) {
+                                Text(
+                                    text = if (effAvg > 0.0) String.format(java.util.Locale.US, "%.2f", effAvg) else "—",
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = markColor
+                                )
+                            }
                         }
                     }
 
