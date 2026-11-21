@@ -227,7 +227,9 @@ fun HomeworkScreen(viewModel: MeshMainViewModel) {
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
                                     .clickable { viewModel.openHomeworkDetails(hw) }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),

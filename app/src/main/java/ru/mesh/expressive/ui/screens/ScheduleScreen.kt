@@ -467,6 +467,7 @@ fun DetailedLessonCard(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(compactShape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             shape = compactShape,
             colors = CardDefaults.cardColors(
@@ -566,6 +567,7 @@ fun DetailedLessonCard(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(ExpressiveCardShape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             shape = ExpressiveCardShape,
             colors = CardDefaults.cardColors(

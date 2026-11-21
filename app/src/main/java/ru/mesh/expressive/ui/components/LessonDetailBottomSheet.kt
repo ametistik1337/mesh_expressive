@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,7 +37,34 @@ import ru.mesh.expressive.ui.viewmodel.MeshMainViewModel
 fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
     val selectedLesson by viewModel.selectedLessonForDetails.collectAsState()
     val isLoading by viewModel.isLessonDetailsLoading.collectAsState()
+    val isUploadingWorkPhoto by viewModel.isUploadingWorkPhoto.collectAsState()
+    val uploadedWorkPhotosMap by viewModel.uploadedWorkPhotos.collectAsState()
+    val workPhotoUploadError by viewModel.workPhotoUploadError.collectAsState()
     val context = LocalContext.current
+
+    var pendingCameraUriStr by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+
+    val photoPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        val lessonId = selectedLesson?.id?.toLongOrNull()
+        android.util.Log.d("MeshWorkPhoto", "PhotoPicker result: uri=$uri lessonId=$lessonId")
+        if (uri != null && lessonId != null) {
+            viewModel.uploadLessonWorkPhoto(lessonId, uri, context)
+        }
+    }
+
+    val cameraLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.TakePicture()
+    ) { success ->
+        val lessonId = selectedLesson?.id?.toLongOrNull()
+        val uri = pendingCameraUriStr?.let { Uri.parse(it) }
+        android.util.Log.d("MeshWorkPhoto", "TakePicture result: success=$success uri=$uri lessonId=$lessonId")
+        if (success && uri != null && lessonId != null) {
+            viewModel.uploadLessonWorkPhoto(lessonId, uri, context)
+        }
+        pendingCameraUriStr = null
+    }
 
     if (selectedLesson != null) {
         val lesson = selectedLesson!!
@@ -45,21 +73,41 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             windowInsets = WindowInsets(0, 0, 0, 0),
             shape = ExpressiveCardShape,
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            dragHandle = {
+                BottomSheetDefaults.DragHandle(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                )
+            }
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .navigationBarsPadding()
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = 24.dp)
+                    .padding(bottom = 28.dp)
             ) {
                 // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.MenuBook,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = lesson.subject,
@@ -109,6 +157,7 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
                             color = markBg,
                             modifier = Modifier
                                 .size(48.dp)
+                                .clip(CircleShape)
                                 .clickable {
                                     viewModel.openMarkDetails(lesson)
                                 }
@@ -173,6 +222,7 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(ExpressiveCardShape)
                         .then(
                             if (!lesson.homework.isNullOrBlank()) {
                                 Modifier.clickable {
@@ -239,6 +289,162 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
                         files = lesson.fileMaterials,
                         viewModel = viewModel
                     )
+                }
+
+                // Student Work Photo Attachment Card
+                Spacer(modifier = Modifier.height(12.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = ExpressiveCardShape,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    ),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.AddAPhoto,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Фото работы к уроку",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            if (isUploadingWorkPhoto) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        }
+
+                        val uploadedForLesson = uploadedWorkPhotosMap[lesson.id.toLongOrNull()].orEmpty()
+                        if (uploadedForLesson.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            uploadedForLesson.forEach { fileName ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = ScoreGreen
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = fileName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+
+                        if (!workPhotoUploadError.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = workPhotoUploadError!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FilledTonalButton(
+                                onClick = {
+                                    photoPickerLauncher.launch(
+                                        androidx.activity.result.PickVisualMediaRequest(
+                                            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                                        )
+                                    )
+                                },
+                                enabled = !isUploadingWorkPhoto,
+                                shape = PillShape,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.PhotoLibrary,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(if (isUploadingWorkPhoto) "Загрузка..." else "Прикрепить фото")
+                            }
+
+                            FilledTonalIconButton(
+                                onClick = {
+                                    val tempFile = java.io.File(
+                                        context.cacheDir,
+                                        "IMG_${System.currentTimeMillis()}.jpg"
+                                    )
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        tempFile
+                                    )
+                                    pendingCameraUriStr = uri.toString()
+                                    android.util.Log.d("MeshWorkPhoto", "Launching camera: uri=$uri")
+                                    cameraLauncher.launch(uri)
+                                },
+                                enabled = !isUploadingWorkPhoto,
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.CameraAlt,
+                                    contentDescription = "Сделать фото",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            OutlinedIconButton(
+                                onClick = {
+                                    val lessonId = lesson.id.toLongOrNull()
+                                    if (lessonId != null) {
+                                        val brokenUri = ru.mesh.expressive.util.FakeCameraJpegGenerator
+                                            .createBrokenCameraJpegUri(context)
+                                        viewModel.uploadLessonWorkPhoto(lessonId, brokenUri, context)
+                                    }
+                                },
+                                enabled = !isUploadingWorkPhoto,
+                                modifier = Modifier.size(48.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                                ),
+                                colors = IconButtonDefaults.outlinedIconButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Icon(
+                                    Icons.Default.BrokenImage,
+                                    contentDescription = "Ломанный файл",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 // Test Materials Card (Only Tests!)
@@ -468,6 +674,21 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                                 fontWeight = FontWeight.Bold,
                                 color = markBadgeFg
                             )
+                            if (isPoint) {
+                                val dotColor = if (isExpired) {
+                                    if (isDark) Color(0xFFFF5252) else Color(0xFFD32F2F)
+                                } else {
+                                    if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 6.dp, y = (-2).dp)
+                                        .size(6.5.dp)
+                                        .clip(CircleShape)
+                                        .background(dotColor)
+                                )
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.width(16.dp))
@@ -777,8 +998,30 @@ fun MarkDetailBottomSheet(viewModel: MeshMainViewModel) {
                 Spacer(modifier = Modifier.height(18.dp))
 
                 // Class Results Section (Оценки класса за эту работу)
-                val distributions = detailedMark?.classResults?.marksDistributions.orEmpty()
-                val totalStudents = detailedMark?.classResults?.totalStudents ?: distributions.sumOf { it.numberOfStudents ?: 0 }
+                val serverDistributions = detailedMark?.classResults?.marksDistributions.orEmpty()
+                val fallbackDistributions = remember(serverDistributions, ranks) {
+                    if (serverDistributions.isNotEmpty() || ranks.isEmpty()) emptyList()
+                    else {
+                        val counts = ranks.mapNotNull { r ->
+                            val m = if (r.lessonMark in 2..5) r.lessonMark else kotlin.math.round(r.averageMark).toInt()
+                            if (m in 2..5) m else null
+                        }.groupingBy { it }.eachCount()
+                        val total = counts.values.sum().coerceAtLeast(1)
+                        counts.entries.sortedByDescending { it.key }.map { (markVal, cnt) ->
+                            ru.mesh.expressive.data.model.ClassMarksDistributionDTO(
+                                percentageOfStudents = (cnt * 100.0 / total).toInt(),
+                                numberOfStudents = cnt,
+                                markValue = ru.mesh.expressive.data.model.DistributionMarkValueDTO(five = markVal)
+                            )
+                        }
+                    }
+                }
+                val distributions = if (serverDistributions.isNotEmpty()) serverDistributions else fallbackDistributions
+                val totalStudents = if (serverDistributions.isNotEmpty()) {
+                    detailedMark?.classResults?.totalStudents ?: distributions.sumOf { it.numberOfStudents ?: 0 }
+                } else {
+                    distributions.sumOf { it.numberOfStudents ?: 0 }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

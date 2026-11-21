@@ -1,8 +1,11 @@
 package ru.mesh.expressive.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -31,21 +34,42 @@ fun HomeworkDetailBottomSheet(viewModel: MeshMainViewModel) {
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             windowInsets = WindowInsets(0, 0, 0, 0),
             shape = ExpressiveCardShape,
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            dragHandle = {
+                BottomSheetDefaults.DragHandle(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                )
+            }
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .navigationBarsPadding()
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = 24.dp)
+                    .padding(bottom = 28.dp)
             ) {
                 // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (hw.isDone) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Assignment,
+                                contentDescription = null,
+                                tint = if (hw.isDone) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = hw.subject,
@@ -94,6 +118,10 @@ fun HomeworkDetailBottomSheet(viewModel: MeshMainViewModel) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = ExpressiveCardShape,
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    ),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {

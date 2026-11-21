@@ -109,8 +109,29 @@ fun MeshExpressiveTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        content = content
-    )
+    @Suppress("DEPRECATION")
+    val customRippleTheme = androidx.compose.runtime.remember(colorScheme) {
+        object : androidx.compose.material.ripple.RippleTheme {
+            @Composable
+            override fun defaultColor() = colorScheme.primary
+
+            @Composable
+            override fun rippleAlpha() = androidx.compose.material.ripple.RippleAlpha(
+                draggedAlpha = 0.08f,
+                focusedAlpha = 0.08f,
+                hoveredAlpha = 0.06f,
+                pressedAlpha = 0.10f
+            )
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.material.ripple.LocalRippleTheme provides customRippleTheme
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            content = content
+        )
+    }
 }

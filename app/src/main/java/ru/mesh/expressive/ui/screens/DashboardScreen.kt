@@ -118,6 +118,7 @@ fun DashboardScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(ExpressiveCardShape)
                             .clickable { onNavigate(MainTab.AUTH) },
                         shape = ExpressiveCardShape,
                         colors = CardDefaults.cardColors(
@@ -522,6 +523,7 @@ fun LessonCard(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(compactShape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             shape = compactShape,
             colors = CardDefaults.cardColors(
@@ -622,6 +624,7 @@ fun LessonCard(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(ExpressiveCardShape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             shape = ExpressiveCardShape,
             colors = CardDefaults.cardColors(

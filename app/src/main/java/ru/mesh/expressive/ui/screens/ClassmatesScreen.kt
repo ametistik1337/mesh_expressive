@@ -6,7 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
@@ -247,6 +250,7 @@ fun ClassmatesScreen(viewModel: MeshMainViewModel) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(ExpressiveCardShape)
                             .clickable { selectedClassmateForModal = classmate },
                         shape = ExpressiveCardShape,
                         colors = CardDefaults.cardColors(
@@ -329,17 +333,41 @@ fun ClassmateDetailBottomSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         windowInsets = WindowInsets(0, 0, 0, 0),
         shape = ExpressiveCardShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainer
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+            )
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp)
+                .padding(bottom = 28.dp)
         ) {
-            // Header without avatars or numbers
-            Column(modifier = Modifier.fillMaxWidth()) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (classmate.isCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = if (classmate.isCurrentUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
                 Text(
                     text = "${classmate.firstName} ${classmate.lastName}${if (classmate.isCurrentUser) " (Вы)" else ""}",
                     style = MaterialTheme.typography.headlineSmall,
