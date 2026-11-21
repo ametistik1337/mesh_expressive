@@ -1,5 +1,7 @@
 package ru.mesh.expressive.data.repository
 
+import okhttp3.MediaType.Companion.toMediaType
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -2377,26 +2379,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                     }.awaitAll()
                 }
 
-                val allItems = if (items.none { it.isCurrentUser } && userLessonMark > 0) {
-                    val myItem = AcademicClassRankItem(
-                        rankPlace = 1,
-                        averageMark = userLessonMark.toDouble(),
-                        rankStatus = "stable",
-                        isCurrentUser = true,
-                        personId = effectiveGuid,
-                        imageId = null,
-                        displayName = "${_studentProfile.value.lastName} ${_studentProfile.value.firstName} (Вы)",
-                        gamificationId = _gamificationProfile.value.gamificationId.orEmpty(),
-                        profileId = dynamicProfileId,
-                        lessonMark = userLessonMark
-                    )
-                    items + myItem
-                } else {
-                    items
-                }
-
-                val rankedItems = allItems.sortedWith(
-                    compareBy({ it.rankPlace }, { -it.averageMark })
+                val rankedItems = items.sortedWith(
+                    compareBy<AcademicClassRankItem> { it.rankPlace }
+                        .thenByDescending { it.averageMark }
                 )
 
                 _cachedLessonRanksMap[cacheKey] = rankedItems
@@ -2404,21 +2389,6 @@ class MeshRepository(val sessionManager: SessionManager) {
             }
         } catch (_: Exception) {}
 
-        if (userLessonMark > 0) {
-            val myItem = AcademicClassRankItem(
-                rankPlace = 1,
-                averageMark = userLessonMark.toDouble(),
-                rankStatus = "stable",
-                isCurrentUser = true,
-                personId = effectiveGuid,
-                imageId = null,
-                displayName = "${_studentProfile.value.lastName} ${_studentProfile.value.firstName} (Вы)",
-                gamificationId = _gamificationProfile.value.gamificationId.orEmpty(),
-                profileId = dynamicProfileId,
-                lessonMark = userLessonMark
-            )
-            return@withContext listOf(myItem)
-        }
         emptyList()
     }
 
@@ -3131,5 +3101,137 @@ class MeshRepository(val sessionManager: SessionManager) {
                 dateFmt to dow
             } else isoDate to ""
         } catch (_: Exception) { isoDate to "" }
+    }
+
+    private val lessonWorkIdCache = mutableMapOf<Long, Long>()
+
+    suspend fun uploadStudentWorkPhoto(
+        lessonScheduleItemId: Long,
+        fileName: String,
+        bytes: ByteArray,
+        mimeType: String = "image/jpeg"
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val token = sessionManager.authToken
+                ?: return@withContext Result.failure(IllegalStateException("Не выполнена авторизация"))
+            val studentId = sessionManager.studentId
+            val profileId = sessionManager.profileId
+            val client = okhttp3.OkHttpClient()
+            val gson = com.google.gson.Gson()
+
+            var workId = lessonWorkIdCache[lessonScheduleItemId]
+            if (workId == null) {
+                val createJson = gson.toJson(
+                    mapOf(
+                        "lesson_schedule_item_id" to lessonScheduleItemId,
+                        "student_profile_id" to studentId,
+                        "work_type" to "INDEPENDENT_WORK",
+                        "variant" to 1
+                    )
+                )
+                val createReq = okhttp3.Request.Builder()
+                    .url("https://school.mos.ru/api/ej/attachments/v1/student_work")
+                    .post(createJson.toRequestBody("application/json".toMediaType()))
+                    .addHeader("Authorization", "Bearer $token")
+                    .addHeader("Profile-id", profileId)
+                    .addHeader("X-Mes-Subsystem", "familymp")
+                    .build()
+
+                val createResp = client.newCall(createReq).execute()
+                val createBody = createResp.body?.string() ?: ""
+                android.util.Log.d("MeshWorkPhoto", "POST student_work HTTP ${createResp.code}: $createBody")
+                if (createResp.isSuccessful) {
+                    val parsedCreate = com.google.gson.JsonParser.parseString(createBody).asJsonObject
+                    workId = parsedCreate.get("id")?.asLong
+                } else {
+                    val errMsg = try {
+                        com.google.gson.JsonParser.parseString(createBody)
+                            .asJsonObject.getAsJsonObject("error")?.get("errorText")?.asString
+                            ?: "HTTP ${createResp.code}"
+                    } catch (_: Exception) {
+                        "HTTP ${createResp.code}"
+                    }
+                    return@withContext Result.failure(IllegalStateException(errMsg))
+                }
+                if (workId == null) {
+                    return@withContext Result.failure(IllegalStateException("Создание работы недоступно"))
+                }
+                lessonWorkIdCache[lessonScheduleItemId] = workId
+            }
+
+            val accessReq = okhttp3.Request.Builder()
+                .url("https://school.mos.ru/api/ej/attachments/v1/files/by_student_work/$workId/storage_access")
+                .post("{}".toRequestBody("application/json".toMediaType()))
+                .addHeader("Authorization", "Bearer $token")
+                .addHeader("Profile-id", profileId)
+                .addHeader("X-Mes-Subsystem", "familymp")
+                .build()
+
+            val accessResp = client.newCall(accessReq).execute()
+            val accessBody = accessResp.body?.string() ?: ""
+            if (!accessResp.isSuccessful) {
+                return@withContext Result.failure(IllegalStateException("Ошибка доступа к хранилищу: HTTP ${accessResp.code} $accessBody"))
+            }
+            val accessJson = com.google.gson.JsonParser.parseString(accessBody).asJsonObject
+            val fileUuid = accessJson.get("file_uuid")?.asString
+                ?: return@withContext Result.failure(IllegalStateException("Отсутствует file_uuid"))
+            val fileLink = accessJson.get("file_link")?.asString
+                ?: return@withContext Result.failure(IllegalStateException("Отсутствует file_link"))
+            val storageToken = accessJson.get("token")?.asString
+                ?: return@withContext Result.failure(IllegalStateException("Отсутствует токен хранилища"))
+
+            val multipartBody = okhttp3.MultipartBody.Builder()
+                .setType(okhttp3.MultipartBody.FORM)
+                .addFormDataPart(
+                    "content",
+                    fileName,
+                    bytes.toRequestBody(mimeType.toMediaType())
+                )
+                .build()
+
+            val uploadReq = okhttp3.Request.Builder()
+                .url(fileLink)
+                .post(multipartBody)
+                .addHeader("Authorization", "Bearer $storageToken")
+                .build()
+
+            val uploadResp = client.newCall(uploadReq).execute()
+            if (!uploadResp.isSuccessful) {
+                val err = uploadResp.body?.string() ?: ""
+                return@withContext Result.failure(IllegalStateException("Ошибка загрузки файла: HTTP ${uploadResp.code} $err"))
+            }
+
+            val ext = fileName.substringAfterLast('.', "jpeg").lowercase()
+            val attachJson = gson.toJson(
+                mapOf(
+                    "files" to listOf(
+                        mapOf(
+                            "file_uuid" to fileUuid,
+                            "file_name" to fileName,
+                            "order_number" to 1,
+                            "size" to bytes.size,
+                            "extension" to ext
+                        )
+                    )
+                )
+            )
+            val attachReq = okhttp3.Request.Builder()
+                .url("https://school.mos.ru/api/ej/attachments/v1/files/by_student_work/$workId")
+                .post(attachJson.toRequestBody("application/json".toMediaType()))
+                .addHeader("Authorization", "Bearer $token")
+                .addHeader("Profile-id", profileId)
+                .addHeader("X-Mes-Subsystem", "familymp")
+                .build()
+
+            val attachResp = client.newCall(attachReq).execute()
+            if (!attachResp.isSuccessful) {
+                val err = attachResp.body?.string() ?: ""
+                return@withContext Result.failure(IllegalStateException("Ошибка прикрепления файла: HTTP ${attachResp.code} $err"))
+            }
+
+            Result.success(fileName)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }

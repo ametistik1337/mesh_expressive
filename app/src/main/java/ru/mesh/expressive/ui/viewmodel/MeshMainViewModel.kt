@@ -904,6 +904,61 @@ class MeshMainViewModel(
         }
     }
 
+    private val _isUploadingWorkPhoto = MutableStateFlow(false)
+    val isUploadingWorkPhoto: StateFlow<Boolean> = _isUploadingWorkPhoto.asStateFlow()
+
+    private val _uploadedWorkPhotos = MutableStateFlow<Map<Long, List<String>>>(emptyMap())
+    val uploadedWorkPhotos: StateFlow<Map<Long, List<String>>> = _uploadedWorkPhotos.asStateFlow()
+
+    private val _workPhotoUploadError = MutableStateFlow<String?>(null)
+    val workPhotoUploadError: StateFlow<String?> = _workPhotoUploadError.asStateFlow()
+
+    fun clearWorkPhotoError() {
+        _workPhotoUploadError.value = null
+    }
+
+    fun uploadLessonWorkPhoto(lessonId: Long, uri: android.net.Uri, context: android.content.Context) {
+        viewModelScope.launch {
+            _isUploadingWorkPhoto.value = true
+            _workPhotoUploadError.value = null
+            try {
+                val resolver = context.contentResolver
+                val mimeType = resolver.getType(uri) ?: "image/jpeg"
+                val fileName = run {
+                    var name = "work_${System.currentTimeMillis()}.jpg"
+                    resolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0 && cursor.moveToFirst()) {
+                            name = cursor.getString(idx) ?: name
+                        }
+                    }
+                    name
+                }
+                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IllegalStateException("Не удалось прочитать файл")
+
+                val res = repository.uploadStudentWorkPhoto(
+                    lessonScheduleItemId = lessonId,
+                    fileName = fileName,
+                    bytes = bytes,
+                    mimeType = mimeType
+                )
+                res.onSuccess { uploadedName ->
+                    val current = _uploadedWorkPhotos.value.toMutableMap()
+                    val list = (current[lessonId] ?: emptyList()) + uploadedName
+                    current[lessonId] = list
+                    _uploadedWorkPhotos.value = current
+                }.onFailure { err ->
+                    _workPhotoUploadError.value = err.localizedMessage ?: "Ошибка загрузки фото"
+                }
+            } catch (e: Exception) {
+                _workPhotoUploadError.value = e.localizedMessage ?: "Ошибка чтения файла"
+            } finally {
+                _isUploadingWorkPhoto.value = false
+            }
+        }
+    }
+
     fun loadScheduleForDates(beginDate: String, endDate: String) {
         viewModelScope.launch {
             repository.loadScheduleForDateRange(beginDate, endDate)
