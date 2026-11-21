@@ -1,19 +1,14 @@
-# Дневник МЭШ Expressive (borichdev fork)
+# Дневник МЭШ Expressive
 
-> [!IMPORTANT]
-> # 🌟 ОРИГИНАЛЬНЫЙ ПРОЕКТ И АВТОРСТВО
-> **Этот репозиторий является форком потрясающего проекта [Expressive MESH](https://github.com/ametistik1337/mesh_expressive), созданного разработчиком [@ametistik1337](https://github.com/ametistik1337).**
->
-> Все лавры, признание и авторские права на первоначальную концепцию, архитектуру и стильный интерфейс принадлежат исключительно **Аметисту**:
-> 👉 **Оригинальный проект:** [https://github.com/ametistik1337/mesh_expressive](https://github.com/ametistik1337/mesh_expressive)
->
-> Данный форк (`borichdev/mesh_expressive`) развивает проект дальше: оперативные хотфиксы боевого API, нативная работа с файлами учителя, AMOLED-тема и синхронизация серверных показателей.
+Быстрый, приватный клиент Московской электронной школы в дизайн-системе Material Design 3 Expressive с нулевым количеством встроенных трекеров.
 
-[![Оригинал](https://img.shields.io/badge/Оригинал-ametistik1337%2Fmesh__expressive-2563EB.svg?style=for-the-badge)](https://github.com/ametistik1337/mesh_expressive)
-[![Форк](https://img.shields.io/badge/Форк-borichdev-7F52FF.svg?style=for-the-badge)](https://github.com/borichdev/mesh_expressive)
-[![Платформа](https://img.shields.io/badge/Платформа-Android_8.0+-3DDC84.svg?style=for-the-badge)](https://www.android.com/)
-[![Трекеры](https://img.shields.io/badge/Трекеры-0-00C853.svg?style=for-the-badge)](https://github.com/ametistik1337)
-[![Лицензия](https://img.shields.io/badge/Лицензия-MIT-gray.svg?style=for-the-badge)](LICENSE)
+[![Последний релиз](https://img.shields.io/github/v/release/ametistik1337/mesh_expressive?label=версия&color=2563EB)](https://github.com/ametistik1337/mesh_expressive/releases/latest)
+[![Платформа](https://img.shields.io/badge/Платформа-Android_8.0+-3DDC84.svg)](https://www.android.com/)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF.svg)](https://kotlinlang.org/)
+[![Compose](https://img.shields.io/badge/Jetpack_Compose-Material3_Expressive-4285F4.svg)](https://developer.android.com/jetpack/compose)
+[![Трекеры](https://img.shields.io/badge/Трекеры-0-00C853.svg)](https://github.com/ametistik1337)
+[![semi vibecoded by gemini](https://img.shields.io/badge/semi--vibecoded-by_gemini-7B1FA2.svg)](https://github.com/ametistik1337)
+[![Лицензия](https://img.shields.io/badge/Лицензия-MIT-gray.svg)](LICENSE)
 
 ---
 
@@ -27,30 +22,10 @@
 
 ---
 
-## Что добавлено и улучшено в этом форке
-
-- **Файлы от учителя («ФАЙЛЫ ОТ УЧИТЕЛЯ»):**
-  - Поддержка вложений к урокам и домашним заданиям напрямую из боевого API МЭШ.
-  - Определение реальных типов файлов (`.pdf`, `.odt`, `.doc`/`.docx`, `.xls`/`.xlsx`, `.ppt`/`.pptx`, `.zip`/`.rar`, изображения).
-  - Скачивание файлов с авторизационными токенами в папку `Загрузки` устройства.
-  - Нативное открытие и просмотр через системный Chooser (`Intent.ACTION_VIEW` + `FileProvider`) во внешних ридерах (Camelot, WPS, LibreOffice и др.).
-  - Разделение кнопок «Скачать» и «Открыть» прямо в шторках урока и ДЗ.
-- **Официальный средний балл и рейтинг:**
-  - Полная синхронизация со средним баллом официального сервера МЭШ (без расхождений и локальных искажений).
-  - Информационная плашка с разъяснением серверных ночных пересчётов позиций в классе.
-  - Поддержка полугодовых учебных периодов (1-е полугодие, 2-е полугодие, год) наравне с четвертями.
-- **AMOLED Black тема:**
-  - Настоящий глубокий чёрный цвет для экономии батареи и визуального комфорта на OLED-экранах.
-- **Посещаемость и ЕМИАС:**
-  - Объединённый таймлайн проходов через турникеты и школьных уроков.
-  - Компактное отображение уважительных причин («Уваж.») в единую строку без скачков вёрстки.
-  - Учёт справок по болезни и автоматическая фильтрация пропусков.
-
----
-
-## Базовый функционал
+## Функционал
 
 ### Оценки и аттестация
+- Честный расчет общего и средневзвешенного GPA без скрытых скруглений API.
 - Учет истекших точек в текущем среднем балле и в истории дат.
 - Отображение замененных точек со звездочкой `*` и история изменений оценки в шторке урока.
 - Динамический переключатель периодов (M3 Connected Buttons) с автоопределением активной четверти или семестра.
@@ -60,13 +35,14 @@
 
 ### Расписание и уроки
 - Календарная сетка занятий с переключением дней недели через Connected Button Group.
-- Интерактивная шторка урока с темой, кабинетом, учителем, прикрепленными тестами и файлами.
+- Интерактивная шторка урока с темой, кабинетом, учителем, прикрепленными тестами и шкалой успеваемости класса.
+- Точные секунды выставления оценок и дедлайнов.
 - Автоматический расчет производственного календаря и шторка графика каникул.
 
 ### Домашние задания
-- Компактный список заданий с фильтрами: «На завтра», «Все», «Невыполненные», «с ЦДЗ».
+- Компактный список заданий с центрированными фильтрами: «На завтра», «Все», «Невыполненные», «с ЦДЗ».
 - Встроенное решение тестов ЦДЗ прямо в приложении без перехода в браузер.
-- Чистый интерфейс с фокусом на материалах учителей.
+- Загрузка решений (фото, документы) через официальный эндпоинт вложений с системным пикером файлов.
 
 ### Деанонимизация рейтинга класса
 - Раскрытие анонимизированных участников школьного рейтинга путем сопоставления personId, contingentGuid и связей параллели.
@@ -76,7 +52,7 @@
 ### Школьные сервисы
 - Баланс карты питания «Москвёнок», лимит трат и история операций в буфете.
 - Точное время прохода через турникеты и активные медицинские справки из системы ЕМИАС.
-- Портфолио: дипломы, грамоты и олимпиады по категориям и этапам.
+- Портфолио: дипломы, грамоты и олимпиады по категориям и этапам (от школьного до заключительного).
 - Геймификация: витрина наград, сдача тестов за звезды и отправка подарков одноклассникам.
 
 ### Сеть, автономность и приватность
@@ -88,19 +64,19 @@
 
 ## Архитектура и стек
 
-- **Язык:** Kotlin 2.0
-- **UI:** Jetpack Compose, Material Design 3 Expressive
-- **Архитектура:** MVVM, Unidirectional Data Flow (UDF), Kotlin Coroutines & StateFlow
-- **Сеть:** Retrofit, OkHttp, GSON
-- **Хранилище:** Защищенный локальный кэш (EncryptedSharedPreferences / SessionManager)
-- **Сборка:** Gradle (Kotlin DSL)
+- Язык: Kotlin 2.0
+- UI: Jetpack Compose, Material Design 3 Expressive
+- Архитектура: MVVM, unidirectional data flow (UDF), Kotlin Coroutines & StateFlow
+- Сеть: Retrofit, OkHttp, GSON
+- Хранилище: Защищенный локальный кэш (EncryptedSharedPreferences / SessionManager)
+- Сборка: Gradle (Kotlin DSL)
 
 ---
 
 ## Сборка и установка
 
 ```bash
-git clone git@github.com:borichdev/mesh_expressive.git
+git clone https://github.com/ametistik1337/mesh_expressive.git
 cd mesh_expressive
 ./gradlew assembleRelease
 ```
