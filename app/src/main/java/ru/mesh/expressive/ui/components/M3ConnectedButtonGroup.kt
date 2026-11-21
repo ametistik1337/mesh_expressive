@@ -118,15 +118,13 @@ fun <T> M3ConnectedButtonGroup(
             )
 
             Surface(
-                modifier = Modifier
-                    .height(40.dp)
-                    .clip(shape)
-                    .clickable {
-                        if (!isSelected) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onItemSelected(item)
-                        }
-                    },
+                onClick = {
+                    if (!isSelected) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onItemSelected(item)
+                    }
+                },
+                modifier = Modifier.height(40.dp),
                 shape = shape,
                 color = containerColor,
                 border = null

@@ -1,5 +1,8 @@
 package ru.mesh.expressive.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -251,6 +254,28 @@ fun SettingsScreen(
             }
         }
 
+        // Проверить обновления
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = ExpressiveCardShape,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    SettingsActionRow(
+                        icon = Icons.Default.SystemUpdate,
+                        title = if (isCheckingUpdate) "Проверка..." else "Проверить обновления",
+                        subtitle = "Свежие сборки и релизы на GitHub",
+                        onClick = {
+                            viewModel.checkForUpdatesManual { hasUpdate, message ->
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
         // 2. Privacy & Security Banner
         item {
             Card(
@@ -325,21 +350,18 @@ fun SettingsScreen(
                             }
                         }
                         Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            listOf("SYSTEM" to "Системная", "DARK" to "Тёмная", "LIGHT" to "Светлая").forEach { (mode, title) ->
-                                val isSelected = themeMode == mode
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { viewModel.setThemeMode(mode) },
-                                    label = { Text(title) },
-                                    shape = PillShape,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                        val themeOptions = remember {
+                            listOf("SYSTEM" to "Системная", "DARK" to "Тёмная", "LIGHT" to "Светлая")
                         }
+                        val selectedThemeOption = themeOptions.find { it.first == themeMode } ?: themeOptions.first()
+                        ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                            items = themeOptions,
+                            selectedItem = selectedThemeOption,
+                            onItemSelected = { viewModel.setThemeMode(it.first) },
+                            label = { it.second },
+                            showCheckmark = true,
+                            scrollable = false
+                        )
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -415,26 +437,23 @@ fun SettingsScreen(
                             }
                         }
                         Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+                        val startTabOptions = remember {
                             listOf(
                                 "DASHBOARD" to "Главная",
                                 "SCHEDULE" to "Расписание",
                                 "HOMEWORK" to "Задания",
                                 "MARKS" to "Оценки"
-                            ).forEach { (tabKey, tabTitle) ->
-                                val isSelected = startTab == tabKey
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { viewModel.setStartTab(tabKey) },
-                                    label = { Text(tabTitle, fontSize = 12.sp) },
-                                    shape = PillShape,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                            )
                         }
+                        val selectedStartTabOption = startTabOptions.find { it.first == startTab } ?: startTabOptions.first()
+                        ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                            items = startTabOptions,
+                            selectedItem = selectedStartTabOption,
+                            onItemSelected = { viewModel.setStartTab(it.first) },
+                            label = { it.second },
+                            showCheckmark = true,
+                            scrollable = true
+                        )
                     }
                 }
             }
@@ -759,19 +778,6 @@ fun SettingsScreen(
                         isChecked = isAutoUpdatesAndCounterEnabled,
                         onCheckedChange = { viewModel.toggleAutoUpdatesAndCounter(it) }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    SettingsActionRow(
-                        icon = Icons.Default.SystemUpdate,
-                        title = if (isCheckingUpdate) "Проверка..." else "Проверить обновления",
-                        subtitle = "Свежие сборки и релизы на GitHub",
-                        onClick = {
-                            viewModel.checkForUpdatesManual { hasUpdate, message ->
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    )
                 }
             }
         }
@@ -801,43 +807,9 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                try {
-                                    uriHandler.openUri("https://github.com/borichdev/mesh_expressive")
-                                } catch (_: Exception) {}
-                            },
-                            shape = PillShape,
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("GitHub Форк", style = MaterialTheme.typography.labelSmall)
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                try {
-                                    uriHandler.openUri("https://github.com/ametistik1337/mesh_expressive")
-                                } catch (_: Exception) {}
-                            },
-                            shape = PillShape,
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFFE91E63))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Оригинал", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Форк: borichdev • Оригинальный автор: ametistik1337",
+                        text = "semi vibecoded by gemini",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
@@ -1097,7 +1069,9 @@ private fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!isChecked) },
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onCheckedChange(!isChecked) }
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1145,7 +1119,9 @@ private fun SettingsActionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
