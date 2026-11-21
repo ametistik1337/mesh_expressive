@@ -30,6 +30,12 @@ enum class MarksViewMode {
     BY_SUBJECT, BY_DATE
 }
 
+enum class RatingPeriodMode(val title: String) {
+    YEAR("За год"),
+    SEMESTER("За полугодие"),
+    MONTH("За месяц")
+}
+
 class MeshMainViewModel(
     val repository: MeshRepository,
     val sessionManager: SessionManager
@@ -93,6 +99,18 @@ class MeshMainViewModel(
     private val _themeMode = MutableStateFlow(sessionManager.themeMode)
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
+    private val _isAmoledDark = MutableStateFlow(sessionManager.isAmoledDark)
+    val isAmoledDark: StateFlow<Boolean> = _isAmoledDark.asStateFlow()
+
+    private val _studyPeriodMode = MutableStateFlow(sessionManager.studyPeriodMode)
+    val studyPeriodMode: StateFlow<String> = _studyPeriodMode.asStateFlow()
+
+    private val _ratingPeriodMode = MutableStateFlow(RatingPeriodMode.YEAR)
+    val ratingPeriodMode: StateFlow<RatingPeriodMode> = _ratingPeriodMode.asStateFlow()
+
+    private val _semesterAcademicRanks = MutableStateFlow<List<AcademicClassRankItem>>(emptyList())
+    val semesterAcademicRanks: StateFlow<List<AcademicClassRankItem>> = _semesterAcademicRanks.asStateFlow()
+
     val studentProfile: StateFlow<StudentProfile> = repository.studentProfile
     val weekSchedule: StateFlow<Map<String, List<LessonScheduleItem>>> = repository.weekSchedule
     val scheduleToday: StateFlow<List<LessonScheduleItem>> = repository.scheduleToday
@@ -117,26 +135,14 @@ class MeshMainViewModel(
 
     val activeGpa: StateFlow<Double> = combine(
         studentProfile,
-        subjectSummaries,
-        showWeightedGpa
-    ) { profile, summaries, weighted ->
-        val allMarks = summaries.flatMap { it.marks }
-        if (allMarks.isNotEmpty()) {
-            if (weighted) {
-                val totalWeight = allMarks.sumOf { it.weight }
-                if (totalWeight > 0.0) {
-                    allMarks.sumOf { it.value * it.weight } / totalWeight
-                } else {
-                    allMarks.map { it.value }.average()
-                }
-            } else {
-                allMarks.map { it.value }.average()
-            }
-        } else if (summaries.isNotEmpty()) {
-            val avgs = summaries.map { it.getEffectiveAverage(weighted) }.filter { it > 0.0 }
-            if (avgs.isNotEmpty()) avgs.average() else profile.gpa
-        } else {
+        ratingInfo
+    ) { profile, rInfo ->
+        if (profile.gpa > 0.0) {
             profile.gpa
+        } else if (rInfo.score > 0) {
+            rInfo.score / 20.0
+        } else {
+            0.0
         }
     }.stateIn(
         scope = viewModelScope,
@@ -153,17 +159,55 @@ class MeshMainViewModel(
     private val _isSubjectRankLoading = MutableStateFlow(false)
     val isSubjectRankLoading: StateFlow<Boolean> = _isSubjectRankLoading.asStateFlow()
 
+    fun selectRatingPeriodMode(mode: RatingPeriodMode) {
+        _ratingPeriodMode.value = mode
+        if (mode == RatingPeriodMode.SEMESTER) {
+            loadSemesterRanks()
+        } else if (_selectedRatingSubjectId.value != null) {
+            selectRatingSubject(_selectedRatingSubjectId.value)
+        }
+    }
+
+    private fun resolveSemesterTargetDate(): String {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val startYear = ru.mesh.expressive.util.DateUtils.getAcademicStartYear()
+        val firstSemEnd = "$startYear-12-30"
+        return if (today <= firstSemEnd) today else today
+    }
+
+    private fun loadSemesterRanks() {
+        viewModelScope.launch {
+            _isSubjectRankLoading.value = true
+            try {
+                val subjId = _selectedRatingSubjectId.value
+                val subjName = subjId?.let { id -> subjectSummaries.value.find { it.subjectId == id }?.subject }
+                val list = repository.fetchSubjectClassRank(subjId, subjName, resolveSemesterTargetDate())
+                if (subjId != null) {
+                    _subjectAcademicRanks.value = list
+                } else {
+                    _semesterAcademicRanks.value = list
+                }
+            } finally {
+                _isSubjectRankLoading.value = false
+            }
+        }
+    }
+
     fun selectRatingSubject(subjectId: Long?) {
         _selectedRatingSubjectId.value = subjectId
         if (subjectId == null) {
             _subjectAcademicRanks.value = emptyList()
+            if (_ratingPeriodMode.value == RatingPeriodMode.SEMESTER && _semesterAcademicRanks.value.isEmpty()) {
+                loadSemesterRanks()
+            }
             return
         }
         viewModelScope.launch {
             _isSubjectRankLoading.value = true
             try {
                 val subjName = subjectSummaries.value.find { it.subjectId == subjectId }?.subject
-                val list = repository.fetchSubjectClassRank(subjectId, subjName)
+                val targetDate = if (_ratingPeriodMode.value == RatingPeriodMode.SEMESTER) resolveSemesterTargetDate() else null
+                val list = repository.fetchSubjectClassRank(subjectId, subjName, targetDate)
                 _subjectAcademicRanks.value = list
             } finally {
                 _isSubjectRankLoading.value = false
@@ -509,6 +553,16 @@ class MeshMainViewModel(
         _themeMode.value = mode
     }
 
+    fun toggleAmoledDark(enabled: Boolean) {
+        sessionManager.isAmoledDark = enabled
+        _isAmoledDark.value = enabled
+    }
+
+    fun setStudyPeriodMode(mode: String) {
+        sessionManager.studyPeriodMode = mode
+        _studyPeriodMode.value = mode
+    }
+
     fun unlockReward(id: String) {
         repository.unlockReward(id)
     }
@@ -656,7 +710,9 @@ class MeshMainViewModel(
                         markComment = detailed.markComment ?: lesson.markComment,
                         markControlForm = detailed.markControlForm ?: lesson.markControlForm,
                         markCreatedAt = detailed.markCreatedAt ?: lesson.markCreatedAt,
-                        testMaterials = detailed.testMaterials
+                        testMaterials = detailed.testMaterials,
+                        fileMaterials = detailed.fileMaterials,
+                        materialsCount = detailed.fileMaterials.size + detailed.testMaterials.size
                     )
                 }
                 _isLessonDetailsLoading.value = false
@@ -718,15 +774,56 @@ class MeshMainViewModel(
         _markSubjectRanks.value = emptyList()
     }
 
+    private val _downloadedFileNames = MutableStateFlow<Set<String>>(emptySet())
+    val downloadedFileNames: StateFlow<Set<String>> = _downloadedFileNames.asStateFlow()
+
+    private val _currentlyDownloadingUrl = MutableStateFlow<String?>(null)
+    val currentlyDownloadingUrl: StateFlow<String?> = _currentlyDownloadingUrl.asStateFlow()
+
+    fun refreshDownloadedFiles(context: android.content.Context) {
+        _downloadedFileNames.value = ru.mesh.expressive.util.MeshFileDownloader.getDownloadedFileNames(context)
+    }
+
     private val _selectedHomeworkForDetails = MutableStateFlow<ru.mesh.expressive.data.model.HomeworkItem?>(null)
     val selectedHomeworkForDetails: StateFlow<ru.mesh.expressive.data.model.HomeworkItem?> = _selectedHomeworkForDetails.asStateFlow()
 
     fun openHomeworkDetails(homework: ru.mesh.expressive.data.model.HomeworkItem) {
         _selectedHomeworkForDetails.value = homework
+        val lessonId = homework.lessonId
+        if (lessonId != null && lessonId > 0 && homework.teacherFiles.isEmpty()) {
+            viewModelScope.launch {
+                val detailed = repository.fetchLessonDetails(lessonId)
+                if (detailed != null && detailed.fileMaterials.isNotEmpty()) {
+                    val current = _selectedHomeworkForDetails.value
+                    if (current?.id == homework.id) {
+                        _selectedHomeworkForDetails.value = current.copy(
+                            teacherFiles = detailed.fileMaterials,
+                            materialsCount = detailed.fileMaterials.size
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun closeHomeworkDetails() {
         _selectedHomeworkForDetails.value = null
+    }
+
+    fun openAttachment(context: android.content.Context, url: String, fileName: String) {
+        refreshDownloadedFiles(context)
+        if (ru.mesh.expressive.util.MeshFileDownloader.isDownloaded(context, fileName)) {
+            val file = ru.mesh.expressive.util.MeshFileDownloader.getAttachmentFile(context, fileName)
+            val uri = ru.mesh.expressive.util.MeshFileDownloader.getFileUri(context, file)
+            val mime = ru.mesh.expressive.util.MeshFileDownloader.getMimeType(fileName)
+            ru.mesh.expressive.util.MeshFileDownloader.openFile(context, uri, mime, fileName)
+        } else {
+            downloadAttachment(context, url, fileName, openAfterDownload = true)
+        }
+    }
+
+    fun shareAttachment(context: android.content.Context, fileName: String) {
+        ru.mesh.expressive.util.MeshFileDownloader.shareFile(context, fileName)
     }
 
     private val _isAttachmentUploading = MutableStateFlow(false)
@@ -780,6 +877,7 @@ class MeshMainViewModel(
     fun downloadAttachment(context: android.content.Context, url: String, fileName: String, openAfterDownload: Boolean = false) {
         viewModelScope.launch {
             _isDownloadingFile.value = true
+            _currentlyDownloadingUrl.value = url
             val result = ru.mesh.expressive.util.MeshFileDownloader.downloadFile(
                 context = context,
                 url = url,
@@ -787,13 +885,15 @@ class MeshMainViewModel(
                 sessionManager = repository.sessionManager
             )
             _isDownloadingFile.value = false
+            _currentlyDownloadingUrl.value = null
             when (result) {
                 is ru.mesh.expressive.util.DownloadResult.Success -> {
+                    _downloadedFileNames.value = _downloadedFileNames.value + result.fileName
                     _downloadStatusMessage.value = "Файл сохранен: ${result.fileName}"
                     if (openAfterDownload) {
-                        ru.mesh.expressive.util.MeshFileDownloader.openFile(context, result.uri, result.mimeType)
+                        ru.mesh.expressive.util.MeshFileDownloader.openFile(context, result.uri, result.mimeType, result.fileName)
                     } else {
-                        android.widget.Toast.makeText(context, "Файл сохранен в Загрузки: ${result.fileName}", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, "Файл сохранен: ${result.fileName}", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
                 is ru.mesh.expressive.util.DownloadResult.Error -> {

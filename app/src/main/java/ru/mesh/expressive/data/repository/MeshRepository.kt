@@ -408,6 +408,7 @@ class MeshRepository(val sessionManager: SessionManager) {
 
     private val _attendance = MutableStateFlow(AttendanceSummary())
     val attendance: StateFlow<AttendanceSummary> = _attendance.asStateFlow()
+    private var rawAttendanceDto: AttendanceResponseDTO? = null
 
     private val _periodsSchedules = MutableStateFlow<List<PeriodScheduleItemDTO>>(emptyList())
     val periodsSchedules: StateFlow<List<PeriodScheduleItemDTO>> = _periodsSchedules.asStateFlow()
@@ -448,96 +449,42 @@ class MeshRepository(val sessionManager: SessionManager) {
     }
 
     fun calculateLiveGpa(showWeighted: Boolean = sessionManager.showWeightedGpa): Double {
-        val allMarks = _subjectSummaries.value.flatMap { it.marks }
-        if (allMarks.isNotEmpty()) {
-            return if (showWeighted) {
-                val totalWeight = allMarks.sumOf { it.weight }
-                if (totalWeight > 0.0) {
-                    allMarks.sumOf { it.value * it.weight } / totalWeight
-                } else {
-                    allMarks.map { it.value }.average()
-                }
-            } else {
-                allMarks.map { it.value }.average()
-            }
-        }
+        if (_studentProfile.value.gpa > 0.0) return _studentProfile.value.gpa
+        if (_ratingInfo.value.score > 0) return _ratingInfo.value.score / 20.0
         val validSubjAvgs = _subjectSummaries.value.map { it.averageMark }.filter { it > 0.0 }
         if (validSubjAvgs.isNotEmpty()) return validSubjAvgs.average()
-        return _studentProfile.value.gpa
+        return 0.0
     }
 
-    private fun reconcileAndRankItems(
+    private fun sortServerRankItems(
         items: List<AcademicClassRankItem>,
-        currentUserGuid: String,
-        currentUserLiveAverage: Double
+        currentUserGuid: String
     ): List<AcademicClassRankItem> {
         if (items.isEmpty()) return emptyList()
 
-        val updatedItems = items.map { item ->
-            val isCurrent = item.isCurrentUser || 
+        val normalized = items.map { item ->
+            val isCurrent = item.isCurrentUser ||
                 (currentUserGuid.isNotBlank() && item.personId.equals(currentUserGuid, ignoreCase = true)) ||
                 item.displayName.contains("(Вы)", ignoreCase = true)
-            if (isCurrent) {
-                val effAvg = if (currentUserLiveAverage > 0.0) currentUserLiveAverage else item.averageMark
-                item.copy(averageMark = effAvg, isCurrentUser = true)
-            } else {
-                item
-            }
+            if (isCurrent && !item.isCurrentUser) item.copy(isCurrentUser = true) else item
         }
 
-        val rated = updatedItems.filter { it.averageMark > 0.0 }
-        val unrated = updatedItems.filter { it.averageMark <= 0.0 }.map { it.copy(rankPlace = 0) }
+        val rated = normalized
+            .filter { it.averageMark > 0.0 || it.rankPlace > 0 }
+            .sortedWith(
+                compareBy<AcademicClassRankItem> { if (it.rankPlace > 0) it.rankPlace else Int.MAX_VALUE }
+                    .thenByDescending { it.averageMark }
+            )
+        val unrated = normalized
+            .filter { it.averageMark <= 0.0 && it.rankPlace <= 0 }
+            .map { it.copy(rankPlace = 0) }
 
-        val distinctAverages = rated
-            .map { String.format(Locale.US, "%.2f", it.averageMark).toDoubleOrNull() ?: it.averageMark }
-            .distinct()
-            .sortedDescending()
-
-        val rankByAvg = distinctAverages.mapIndexed { index, avg -> avg to (index + 1) }.toMap()
-
-        val rankedRated = rated.map { item ->
-            val roundedAvg = String.format(Locale.US, "%.2f", item.averageMark).toDoubleOrNull() ?: item.averageMark
-            val newPlace = rankByAvg[roundedAvg] ?: item.rankPlace
-            val newStatus = if (item.isCurrentUser) {
-                if (item.rankPlace > 0 && newPlace < item.rankPlace) "up"
-                else if (item.rankPlace > 0 && newPlace > item.rankPlace) "down"
-                else item.rankStatus
-            } else {
-                item.rankStatus
-            }
-            item.copy(rankPlace = newPlace, rankStatus = newStatus)
-        }.sortedWith(compareBy({ it.rankPlace }, { -it.averageMark }))
-
-        return rankedRated + unrated
+        return rated + unrated
     }
 
     fun refreshLiveGpaAndRating() {
-        val liveGpa = calculateLiveGpa(sessionManager.showWeightedGpa)
-        if (liveGpa > 0.0) {
-            val updated = _studentProfile.value.copy(gpa = liveGpa)
-            _studentProfile.value = updated
-            sessionManager.cachedProfile = updated
-        }
-        val cachedRanks = _academicClassRanks.value
-        if (cachedRanks.isNotEmpty()) {
-            val myGuid = sessionManager.cachedProfile?.contingentGuid.orEmpty()
-            val reconciled = reconcileAndRankItems(cachedRanks, myGuid, liveGpa)
-            _academicClassRanks.value = reconciled
-            sessionManager.cachedAcademicClassRanks = reconciled
-
-            val myRank = reconciled.find { it.isCurrentUser }
-            if (myRank != null && myRank.averageMark > 0.0) {
-                val oldRInfo = _ratingInfo.value
-                val newRInfo = RatingInfo(
-                    classRank = myRank.rankPlace,
-                    totalInClass = reconciled.size,
-                    score = (myRank.averageMark * 20).toInt(),
-                    rankChange = if (myRank.rankStatus.equals("up", ignoreCase = true)) 1 else if (myRank.rankStatus.equals("down", ignoreCase = true)) -1 else oldRInfo.rankChange
-                )
-                _ratingInfo.value = newRInfo
-                sessionManager.cachedRatingInfo = newRInfo
-            }
-        }
+        sessionManager.cachedRatingInfo?.let { _ratingInfo.value = it }
+        sessionManager.cachedProfile?.let { _studentProfile.value = it }
     }
 
     fun loadCachedData() {
@@ -554,34 +501,13 @@ class MeshRepository(val sessionManager: SessionManager) {
         sessionManager.cachedRewards?.let { _rewards.value = it }
         sessionManager.cachedProfileRewards?.let { _profileRewards.value = it }
         sessionManager.cachedMealsBalance?.let { _mealsBalance.value = it }
-        val liveGpa = calculateLiveGpa(sessionManager.showWeightedGpa)
         sessionManager.cachedRatingInfo?.let {
-            if (liveGpa > 0.0) {
-                _ratingInfo.value = it.copy(score = (liveGpa * 20).toInt())
-            } else {
-                _ratingInfo.value = it
-            }
+            _ratingInfo.value = it
         }
         val cachedRanks = sessionManager.cachedAcademicClassRanks
         if (!cachedRanks.isNullOrEmpty()) {
             val myGuid = sessionManager.cachedProfile?.contingentGuid.orEmpty()
-            if (liveGpa > 0.0) {
-                val reconciled = reconcileAndRankItems(cachedRanks, myGuid, liveGpa)
-                _academicClassRanks.value = reconciled
-                val myRank = reconciled.find { it.isCurrentUser }
-                if (myRank != null && myRank.averageMark > 0.0) {
-                    val oldRInfo = sessionManager.cachedRatingInfo
-                    val newRInfo = RatingInfo(
-                        classRank = myRank.rankPlace,
-                        totalInClass = reconciled.size,
-                        score = (myRank.averageMark * 20).toInt(),
-                        rankChange = if (myRank.rankStatus.equals("up", ignoreCase = true)) 1 else if (myRank.rankStatus.equals("down", ignoreCase = true)) -1 else (oldRInfo?.rankChange ?: 0)
-                    )
-                    _ratingInfo.value = newRInfo
-                }
-            } else {
-                _academicClassRanks.value = cachedRanks
-            }
+            _academicClassRanks.value = sortServerRankItems(cachedRanks, myGuid)
         }
         sessionManager.cachedAttendance?.let { _attendance.value = it }
         sessionManager.cachedPeriodsSchedules?.let {
@@ -617,7 +543,20 @@ class MeshRepository(val sessionManager: SessionManager) {
         _attendance.value = AttendanceSummary()
     }
 
+    private val isFetchingRemote = java.util.concurrent.atomic.AtomicBoolean(false)
+
     suspend fun fetchRemoteData() = withContext(Dispatchers.IO) {
+        if (!isFetchingRemote.compareAndSet(false, true)) {
+            return@withContext
+        }
+        try {
+            fetchRemoteDataInternal()
+        } finally {
+            isFetchingRemote.set(false)
+        }
+    }
+
+    private suspend fun fetchRemoteDataInternal() = withContext(Dispatchers.IO) {
         val rawToken = sessionManager.authToken
         if (rawToken.isNullOrBlank()) {
             return@withContext
@@ -785,6 +724,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                         val currentDayLessons = eventMap.getOrPut(dateKey) { mutableListOf() }
                         val lessonNum = currentDayLessons.size + 1
 
+                        val eventMatCount = (ev.homework?.materials?.let { (it.countHomework ?: 0) + (it.countLearn ?: 0) + (it.countExecute ?: 0) } ?: 0) +
+                            (ev.materials?.let { (it.countHomework ?: 0) + (it.countLearn ?: 0) + (it.countExecute ?: 0) } ?: 0)
+
                         val lessonItem = LessonScheduleItem(
                             id = ev.id?.toString() ?: "ev_${lessonNum}_$dateKey",
                             subject = ev.subjectName ?: "Урок",
@@ -804,7 +746,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                             markId = firstMark?.id,
                             markWeight = markW,
                             markComment = firstMark?.comment,
-                            homework = hwDesc
+                            homework = hwDesc,
+                            topic = ev.lessonTheme ?: ev.title,
+                            materialsCount = eventMatCount
                         )
                         currentDayLessons.add(lessonItem)
 
@@ -813,6 +757,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                             extraHwList.add(
                                 HomeworkItem(
                                     id = "ev_hw_${ev.id ?: lessonNum}",
+                                    lessonId = ev.id,
                                     subject = ev.subjectName ?: "Предмет",
                                     description = hwDesc,
                                     date = dateKey,
@@ -822,17 +767,20 @@ class MeshRepository(val sessionManager: SessionManager) {
                                     rawDueDate = dateKey,
                                     rawTargetDate = dateKey,
                                     targetDate = formattedDate,
-                                    assignedDate = dateKey
+                                    assignedDate = dateKey,
+                                    materialsCount = eventMatCount
                                 )
                             )
                         }
                     }
 
                     if (eventMap.isNotEmpty()) {
-                        _weekSchedule.value = eventMap
-                        sessionManager.cachedWeekSchedule = eventMap
-                        _scheduleToday.value = eventMap[todayStr].orEmpty()
-                        _scheduleTomorrow.value = eventMap[tomorrowStr].orEmpty()
+                        val merged = _weekSchedule.value.toMutableMap()
+                        merged.putAll(eventMap)
+                        _weekSchedule.value = merged
+                        sessionManager.cachedWeekSchedule = merged
+                        _scheduleToday.value = merged[todayStr].orEmpty()
+                        _scheduleTomorrow.value = merged[tomorrowStr].orEmpty()
                         sessionManager.cachedScheduleToday = _scheduleToday.value
                         sessionManager.cachedScheduleTomorrow = _scheduleTomorrow.value
                     }
@@ -887,7 +835,17 @@ class MeshRepository(val sessionManager: SessionManager) {
                             rawDueDate = dueDate,
                             rawTargetDate = rawTargetDate,
                             targetDate = formattedTargetDate,
-                            assignedDate = dateAssigned
+                            assignedDate = dateAssigned,
+                            materialsCount = try {
+                                val amountArr = if (item.materialsAmount?.isJsonArray == true) item.materialsAmount.asJsonArray else null
+                                (amountArr?.sumOf { el ->
+                                    if (el.isJsonObject && el.asJsonObject.has("uuids")) {
+                                        el.asJsonObject.getAsJsonArray("uuids").size()
+                                    } else 1
+                                } ?: 0) + (item.attachments?.size ?: 0)
+                            } catch (_: Exception) {
+                                item.attachments?.size ?: 0
+                            }
                         )
                     }
                 } else emptyList()
@@ -910,12 +868,16 @@ class MeshRepository(val sessionManager: SessionManager) {
         // 3.1. Каникулы и учебные периоды (Mobile API)
         try {
             if (dynamicStudentId > 0) {
+                val acCal = java.util.Calendar.getInstance()
+                val curYear = acCal.get(java.util.Calendar.YEAR)
+                val curMonth = acCal.get(java.util.Calendar.MONTH) // 0-based (8 = September)
+                val academicStartYear = if (curMonth >= java.util.Calendar.AUGUST) curYear else curYear - 1
                 val periodsResp = MeshNetworkClient.familyMobileApi.getPeriodsSchedules(
                     token = bearerToken,
                     profileId = dynamicProfileId,
                     studentId = dynamicStudentId,
-                    from = "2026-09-01",
-                    to = "2027-05-31"
+                    from = "$academicStartYear-09-01",
+                    to = "${academicStartYear + 1}-05-31"
                 )
                 if (periodsResp.isSuccessful && periodsResp.body() != null) {
                     val periods = periodsResp.body()!!
@@ -985,7 +947,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                 val rawMarksMap = mutableMapOf<String, MarkByDateItemDTO>()
                 try {
                     val rawMarksResp = MeshNetworkClient.familyMobileApi.getMarks(
-                        bearerToken, dynamicProfileId, "familymp", "diary-mobile", dynamicStudentId, "2026-08-01", todayStr
+                        bearerToken, dynamicProfileId, "familymp", "diary-mobile", dynamicStudentId, ru.mesh.expressive.util.DateUtils.getAcademicYearStart(), todayStr
                     )
                     if (rawMarksResp.isSuccessful && rawMarksResp.body()?.payload != null) {
                         rawMarksResp.body()!!.payload.orEmpty().forEach { rm ->
@@ -1016,7 +978,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                                 val rawStr = rm.value?.trim() ?: ""
                                 val isPt = rm.isPoint == true || !rm.pointDate.isNullOrBlank() || rawStr.endsWith(".") || rawStr == "."
                                 val cleanStr = rawStr.removeSuffix(".").removeSuffix("*").trim()
-                                val cleanVal = cleanStr.toIntOrNull() ?: if (isPt) 0 else 5
+                                val cleanVal = cleanStr.toIntOrNull() ?: 0
                                 val isPtCorrected = rawStr.contains("*") || rawStr.endsWith("*")
                                 MarkItem(
                                     id = mid,
@@ -1048,7 +1010,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                                 val rawStr = m.value?.trim() ?: detailed?.value?.trim() ?: ""
                                 val isPt = m.isPoint == true || detailed?.isPoint == true || !m.pointDate.isNullOrBlank() || !detailed?.pointDate.isNullOrBlank() || rawStr.endsWith(".") || rawStr == "."
                                 val cleanStr = rawStr.removeSuffix(".").removeSuffix("*").trim()
-                                val cleanVal = cleanStr.toIntOrNull() ?: if (isPt) 0 else 5
+                                val cleanVal = cleanStr.toIntOrNull() ?: 0
                                 val ptDate = detailed?.pointDate ?: m.pointDate
                                 val isPtCorrected = rawStr.contains("*") || rawStr.endsWith("*")
                                 MarkItem(
@@ -1082,7 +1044,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                                 val rawStr = pm.value?.trim() ?: detailed?.value?.trim() ?: ""
                                 val isPt = pm.isPoint == true || detailed?.isPoint == true || !pm.pointDate.isNullOrBlank() || !detailed?.pointDate.isNullOrBlank() || rawStr.endsWith(".") || rawStr == "."
                                 val cleanStr = rawStr.removeSuffix(".").removeSuffix("*").trim()
-                                val cleanVal = cleanStr.toIntOrNull() ?: if (isPt) 0 else 5
+                                val cleanVal = cleanStr.toIntOrNull() ?: 0
                                 val ptDate = detailed?.pointDate ?: pm.pointDate
                                 val isPtCorrected = rawStr.contains("*") || rawStr.endsWith("*")
                                 MarkItem(
@@ -1128,26 +1090,6 @@ class MeshRepository(val sessionManager: SessionManager) {
                     if (summaries.isNotEmpty()) {
                         _subjectSummaries.value = summaries
                         sessionManager.cachedSubjectSummaries = summaries
-
-                        val allLoadedMarks = summaries.flatMap { it.marks }.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
-                        val overallGpa = if (allLoadedMarks.isNotEmpty()) {
-                            if (sessionManager.showWeightedGpa) {
-                                val totalWeight = allLoadedMarks.sumOf { it.weight }
-                                if (totalWeight > 0.0) {
-                                    allLoadedMarks.sumOf { it.effectiveValue * it.weight } / totalWeight
-                                } else {
-                                    allLoadedMarks.map { it.effectiveValue }.average()
-                                }
-                            } else {
-                                allLoadedMarks.map { it.effectiveValue }.average()
-                            }
-                        } else {
-                            val validGpas = summaries.map { it.averageMark }.filter { it > 0.0 }
-                            if (validGpas.isNotEmpty()) validGpas.average() else _studentProfile.value.gpa
-                        }
-                        val updatedProfile = _studentProfile.value.copy(gpa = overallGpa)
-                        _studentProfile.value = updatedProfile
-                        sessionManager.cachedProfile = updatedProfile
                     }
                 } else if (rawMarksMap.isNotEmpty()) {
                     val rawMarks = rawMarksMap.values.toList()
@@ -1157,7 +1099,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                             val rawStr = m.value?.trim() ?: ""
                             val isPt = m.isPoint == true || rawStr.endsWith(".") || rawStr == "."
                             val cleanStr = rawStr.removeSuffix(".").removeSuffix("*").trim()
-                            val cleanVal = cleanStr.toIntOrNull() ?: if (isPt) 0 else 5
+                            val cleanVal = cleanStr.toIntOrNull() ?: 0
                             val isPtCorrected = rawStr.contains("*") || rawStr.endsWith("*")
                             MarkItem(
                                 id = m.id?.toString() ?: "",
@@ -1387,8 +1329,6 @@ class MeshRepository(val sessionManager: SessionManager) {
                     val avgMark = myItem?.rank?.averageMarkFive ?: 0.0
                     val rankDelta = if (myItem?.rank?.rankStatus.equals("UP", ignoreCase = true)) 1 else if (myItem?.rank?.rankStatus.equals("DOWN", ignoreCase = true)) -1 else 0
 
-                    val liveGpa = calculateLiveGpa(sessionManager.showWeightedGpa)
-
                     val classmatesMap = _classmates.value.associateBy { it.profileId }
                     val classmatesGamifMap = _classmates.value.associateBy { it.gamificationId }
 
@@ -1396,7 +1336,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                         rankList.map { item ->
                             async(Dispatchers.IO) {
                                 val isMe = item.personId.equals(effectiveGuid, ignoreCase = true)
-                                val place = item.rank?.rankPlace ?: 1
+                                val place = item.rank?.rankPlace ?: 0
                                 val guid = item.personId.orEmpty()
 
                                 var name = if (isMe) "${_studentProfile.value.lastName} ${_studentProfile.value.firstName} (Вы)" else ""
@@ -1426,12 +1366,13 @@ class MeshRepository(val sessionManager: SessionManager) {
                                     } catch (_: Exception) {}
                                 }
 
-                                val finalAvg = if (isMe && liveGpa > 0.0) liveGpa else (item.rank?.averageMarkFive ?: 0.0)
-
                                 AcademicClassRankItem(
                                     rankPlace = place,
-                                    averageMark = finalAvg,
+                                    averageMark = item.rank?.averageMarkFive ?: 0.0,
                                     rankStatus = item.rank?.rankStatus ?: "stable",
+                                    rankPlace30 = item.rank?.rankPlace30 ?: 0,
+                                    averageMark30 = item.rank?.averageMarkFive30 ?: 0.0,
+                                    rankStatus30 = item.rank?.rankStatus30 ?: "stable",
                                     isCurrentUser = isMe,
                                     personId = guid,
                                     imageId = item.imageId,
@@ -1447,7 +1388,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                         } else it
                     }
 
-                    val reconciledAcademicItems = reconcileAndRankItems(academicItems, effectiveGuid, liveGpa)
+                    val reconciledAcademicItems = sortServerRankItems(academicItems, effectiveGuid)
 
                     _academicClassRanks.value = reconciledAcademicItems
                     sessionManager.cachedAcademicClassRanks = reconciledAcademicItems
@@ -1455,7 +1396,7 @@ class MeshRepository(val sessionManager: SessionManager) {
 
                     val myItemInReconciled = reconciledAcademicItems.find { it.isCurrentUser }
                     val finalClassRank = myItemInReconciled?.rankPlace?.takeIf { it > 0 } ?: classRank
-                    val finalAvgMark = myItemInReconciled?.averageMark?.takeIf { it > 0.0 } ?: (if (liveGpa > 0.0) liveGpa else avgMark)
+                    val finalAvgMark = myItemInReconciled?.averageMark?.takeIf { it > 0.0 } ?: avgMark
                     val finalRankDelta = if (myItemInReconciled?.rankStatus.equals("up", ignoreCase = true)) 1 else if (myItemInReconciled?.rankStatus.equals("down", ignoreCase = true)) -1 else rankDelta
 
                     val rInfo = RatingInfo(
@@ -1466,6 +1407,12 @@ class MeshRepository(val sessionManager: SessionManager) {
                     )
                     _ratingInfo.value = rInfo
                     sessionManager.cachedRatingInfo = rInfo
+
+                    if (finalAvgMark > 0.0) {
+                        val updatedProf = _studentProfile.value.copy(gpa = finalAvgMark)
+                        _studentProfile.value = updatedProf
+                        sessionManager.cachedProfile = updatedProf
+                    }
 
                     // Также обновляем рейтинг и средний балл в списке одноклассников
                     if (reconciledAcademicItems.isNotEmpty()) {
@@ -1496,44 +1443,13 @@ class MeshRepository(val sessionManager: SessionManager) {
                     subsystem = "familymp",
                     clientType = "diary-mobile",
                     studentId = dynamicStudentId,
-                    from = "2026-08-01",
-                    to = todayStr
+                    from = ru.mesh.expressive.util.DateUtils.getAcademicYearStart(),
+                    to = ru.mesh.expressive.util.DateUtils.getAcademicYearEnd()
                 )
                 if (attResp.isSuccessful && attResp.body() != null) {
                     val attDto = attResp.body()!!
-                    val days = attDto.attendance
-                    var totalAbsenceLessons = 0
-                    var excusedLessons = 0
-                    var unexcusedLessons = 0
-                    days.forEach { day ->
-                        val lessonList = day.lessons
-                        if (lessonList.isNotEmpty()) {
-                            lessonList.forEach { lesson ->
-                                totalAbsenceLessons++
-                                val isExcused = lesson.reasonId != null || lesson.notified == true || lesson.healthStatus != null
-                                if (isExcused) excusedLessons++ else unexcusedLessons++
-                            }
-                        } else {
-                            totalAbsenceLessons += 6
-                            val isExcused = day.reasonId != null || day.notified == true
-                            if (isExcused) excusedLessons += 6 else unexcusedLessons += 6
-                        }
-                    }
-                    val totalSchoolLessons = (totalAbsenceLessons * 3).coerceAtLeast(60)
-                    val attendedL = (totalSchoolLessons - totalAbsenceLessons).coerceAtLeast(0)
-                    val pct = if (totalSchoolLessons > 0) {
-                        ((attendedL.toDouble() / totalSchoolLessons) * 100.0).coerceIn(0.0, 100.0)
-                    } else 100.0
-
-                    val updated = _attendance.value.copy(
-                        totalLessons = totalSchoolLessons,
-                        attendedLessons = attendedL,
-                        excusedAbsences = excusedLessons,
-                        unexcusedAbsences = unexcusedLessons,
-                        percentage = Math.round(pct * 10.0) / 10.0
-                    )
-                    _attendance.value = updated
-                    sessionManager.cachedAttendance = updated
+                    rawAttendanceDto = attDto
+                    updateMergedAttendance(attDto = rawAttendanceDto)
                 }
             }
         } catch (_: Exception) {}
@@ -1607,11 +1523,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                 }
 
                 if (records.isNotEmpty()) {
-                    val updated = _attendance.value.copy(
-                        emiasCertificates = records
-                    )
-                    _attendance.value = updated
-                    sessionManager.cachedAttendance = updated
+                    val currentYearRecords = records.filter { it.startDate >= ru.mesh.expressive.util.DateUtils.getAcademicYearStart() }
+                    updateMergedAttendance(emias = currentYearRecords)
                 }
             }
         } catch (_: Exception) {}
@@ -1670,7 +1583,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                                             timeIn = inTime,
                                             timeOut = outTime,
                                             duration = dur,
-                                            isCurrentlyInSchool = isCurInSchool
+                                            isCurrentlyInSchool = isCurInSchool,
+                                            rawDate = dateStr
                                         )
                                     )
                                 }
@@ -1680,9 +1594,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                 }
 
                 if (allVisits.isNotEmpty()) {
-                    val updated = _attendance.value.copy(visits = allVisits)
-                    _attendance.value = updated
-                    sessionManager.cachedAttendance = updated
+                    updateMergedAttendance(visits = allVisits)
                 }
             }
         } catch (_: Exception) {}
@@ -2206,22 +2118,19 @@ class MeshRepository(val sessionManager: SessionManager) {
         combined
     }
 
-    suspend fun fetchSubjectClassRank(subjectId: Long? = null, subjectName: String? = null): List<AcademicClassRankItem> = withContext(Dispatchers.IO) {
+    suspend fun fetchSubjectClassRank(
+        subjectId: Long? = null,
+        subjectName: String? = null,
+        targetDate: String? = null
+    ): List<AcademicClassRankItem> = withContext(Dispatchers.IO) {
         val token = sessionManager.authToken ?: return@withContext emptyList()
         val bearerToken = if (token.startsWith("Bearer ")) token else "Bearer $token"
         val effectiveGuid = sessionManager.cachedProfile?.contingentGuid
             ?: _studentProfile.value.contingentGuid.ifBlank { "3473f068-8ec0-47a1-920a-a18e75d6c389" }
         val effectiveClassUnitId = if (_studentProfile.value.classUnitId > 0) _studentProfile.value.classUnitId else sessionManager.classUnitId
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val requestDate = targetDate?.takeIf { it.isNotBlank() }
+            ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val dynamicProfileId = sessionManager.profileId.toLongOrNull() ?: 0L
-
-        val liveSubj = _subjectSummaries.value.find { subj ->
-            (subjectId != null && subjectId > 0 && subj.subjectId == subjectId) ||
-            (!subjectName.isNullOrBlank() && subj.subject.equals(subjectName, ignoreCase = true))
-        }
-        val liveSubjAvg = liveSubj?.getEffectiveAverage(sessionManager.showWeightedGpa)
-            ?: liveSubj?.averageMark
-            ?: 0.0
 
         try {
             val ratingResp = MeshNetworkClient.ratingApi.getClassRank(
@@ -2230,7 +2139,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                 clientType = "diary-mobile",
                 personId = effectiveGuid,
                 classUnitId = effectiveClassUnitId,
-                date = todayStr,
+                date = requestDate,
                 subjectId = subjectId
             )
             if (ratingResp.isSuccessful && ratingResp.body() != null) {
@@ -2243,7 +2152,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                     rankList.map { item ->
                         async(Dispatchers.IO) {
                             val isMe = item.personId.equals(effectiveGuid, ignoreCase = true)
-                            val place = item.rank?.rankPlace ?: 1
+                            val place = item.rank?.rankPlace ?: 0
                             val guid = item.personId.orEmpty()
 
                             val existing = cachedRanksMap[guid]
@@ -2278,13 +2187,13 @@ class MeshRepository(val sessionManager: SessionManager) {
                                 } catch (_: Exception) {}
                             }
 
-                            val serverAvg = item.rank?.averageMarkFive ?: 0.0
-                            val finalAvg = if (isMe && liveSubjAvg > 0.0) liveSubjAvg else serverAvg
-
                             AcademicClassRankItem(
                                 rankPlace = place,
-                                averageMark = finalAvg,
+                                averageMark = item.rank?.averageMarkFive ?: 0.0,
                                 rankStatus = item.rank?.rankStatus ?: "stable",
+                                rankPlace30 = item.rank?.rankPlace30 ?: 0,
+                                averageMark30 = item.rank?.averageMarkFive30 ?: 0.0,
+                                rankStatus30 = item.rank?.rankStatus30 ?: "stable",
                                 isCurrentUser = isMe,
                                 personId = guid,
                                 imageId = item.imageId,
@@ -2300,24 +2209,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                     } else it
                 }
 
-                val allItems = if (items.none { it.isCurrentUser } && liveSubjAvg > 0.0) {
-                    val myItem = AcademicClassRankItem(
-                        rankPlace = 1,
-                        averageMark = liveSubjAvg,
-                        rankStatus = "stable",
-                        isCurrentUser = true,
-                        personId = effectiveGuid,
-                        imageId = null,
-                        displayName = "${_studentProfile.value.lastName} ${_studentProfile.value.firstName} (Вы)",
-                        gamificationId = _gamificationProfile.value.gamificationId.orEmpty(),
-                        profileId = dynamicProfileId
-                    )
-                    items + myItem
-                } else {
-                    items
-                }
-
-                val reconciledItems = reconcileAndRankItems(allItems, effectiveGuid, liveSubjAvg)
+                val reconciledItems = sortServerRankItems(items, effectiveGuid)
                 if (subjectId != null) {
                     _cachedSubjectRanksMap[subjectId] = reconciledItems
                 }
@@ -2327,21 +2219,7 @@ class MeshRepository(val sessionManager: SessionManager) {
 
         val cached = if (subjectId != null) _cachedSubjectRanksMap[subjectId] else null
         if (!cached.isNullOrEmpty()) {
-            return@withContext reconcileAndRankItems(cached, effectiveGuid, liveSubjAvg)
-        }
-        if (liveSubjAvg > 0.0) {
-            val myItem = AcademicClassRankItem(
-                rankPlace = 1,
-                averageMark = liveSubjAvg,
-                rankStatus = "stable",
-                isCurrentUser = true,
-                personId = effectiveGuid,
-                imageId = null,
-                displayName = "${_studentProfile.value.lastName} ${_studentProfile.value.firstName} (Вы)",
-                gamificationId = _gamificationProfile.value.gamificationId.orEmpty(),
-                profileId = dynamicProfileId
-            )
-            return@withContext listOf(myItem)
+            return@withContext sortServerRankItems(cached, effectiveGuid)
         }
         emptyList()
     }
@@ -2574,8 +2452,12 @@ class MeshRepository(val sessionManager: SessionManager) {
                 val markVal = rawMarkStr?.removeSuffix(".")?.toIntOrNull()
                 val markW = firstMark?.weight ?: 1.0
 
-                // Filter and enrich test materials
-                val rawMaterials = b.details?.additionalMaterials.orEmpty()
+                // Filter and enrich materials (including homework attachments and lesson materials)
+                val lessonMaterials = b.details?.additionalMaterials.orEmpty()
+                val hwMaterials = b.lessonHomeworks.orEmpty().flatMap { it.additionalMaterials.orEmpty() }
+                val rawMaterials = (lessonMaterials + hwMaterials).distinctBy { mat ->
+                    mat.id?.toString() ?: mat.uuid ?: mat.urls?.firstOrNull()?.url ?: mat.title.orEmpty()
+                }
                 val testMaterials = mutableListOf<LessonMaterialItem>()
                 val fileMaterials = mutableListOf<LessonMaterialItem>()
 
@@ -2610,77 +2492,111 @@ class MeshRepository(val sessionManager: SessionManager) {
                     val actionName = mat.actionName.orEmpty().lowercase()
                     val title = mat.title.orEmpty().lowercase()
 
-                    val isTest = type.contains("test") ||
-                        type == "kim_variant" ||
-                        type == "test_specification" ||
-                        type == "final_test" ||
-                        type == "functional_grammar_test" ||
-                        typeName.contains("тест") ||
-                        title.contains("тест") ||
-                        actionName.contains("пройти") ||
-                        actionName.contains("изучить")
+                    val hasFileExtension = Regex("\\.(pdf|doc|docx|odt|xls|xlsx|ppt|pptx|png|jpg|jpeg|zip|rar|7z|txt)$", RegexOption.IGNORE_CASE).containsMatchIn(mat.title.orEmpty())
+                    val hasFileLink = mat.urls?.any { it.type == "file_link" || it.url?.contains("/attachments/files/") == true } == true
+                    val isExplicitFile = type == "attachments" || type == "attachment" || type == "file" || hasFileLink || hasFileExtension
 
-                    if (isTest) {
-                        val detailed = mat.uuid?.let { detailedMaterialsMap[it] }
-                        val launchUrl = detailed?.urls?.find { it.type == "launch" }?.url
-                            ?: detailed?.urls?.firstOrNull()?.url
-                            ?: mat.urls?.firstOrNull()?.url
+                    if (isExplicitFile) {
+                        val directFileUrl = mat.urls?.find { it.type == "file_link" }?.url
+                            ?: mat.urls?.firstOrNull { it.url?.contains("/attachments/files/") == true }?.url
+                            ?: mat.urls?.firstOrNull { !it.url.isNullOrBlank() }?.url
 
-                        val finalUrl = when {
-                            !launchUrl.isNullOrBlank() -> launchUrl
-                            !mat.uuid.isNullOrBlank() -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.uuid}/launch", "UTF-8")}"
-                            mat.id != null -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.id}/launch", "UTF-8")}"
-                            else -> "https://uchebnik.mos.ru"
+                        val cleanTitle = mat.title?.takeIf { it.isNotBlank() } ?: "Файл к уроку"
+                        val ext = cleanTitle.substringAfterLast('.', "").lowercase()
+                        val cleanTypeName = when (ext) {
+                            "pdf" -> "PDF документ"
+                            "odt" -> "Документ ODT"
+                            "doc", "docx" -> "Документ Word"
+                            "ppt", "pptx" -> "Презентация PowerPoint"
+                            "xls", "xlsx" -> "Таблица Excel"
+                            "zip", "rar", "7z" -> "Архив"
+                            "png", "jpg", "jpeg" -> "Изображение"
+                            else -> mat.typeName?.takeIf { it.isNotBlank() && it != "Прочее" } ?: "Материал к уроку"
                         }
 
-                        val matTitle = detailed?.title?.takeIf { it.isNotBlank() }
-                            ?: mat.title?.takeIf { it.isNotBlank() }
-                            ?: detailed?.typeName?.takeIf { it.isNotBlank() }
-                            ?: mat.typeName?.takeIf { it.isNotBlank() }
-                            ?: "Тестовое задание"
-
-                        val matTypeName = detailed?.typeName?.takeIf { it.isNotBlank() }
-                            ?: mat.typeName?.takeIf { it.isNotBlank() }
-                            ?: "Тест"
-
-                        testMaterials.add(
-                            LessonMaterialItem(
-                                title = matTitle,
-                                typeName = matTypeName,
-                                url = finalUrl,
-                                isFile = false
-                            )
-                        )
-                    } else {
-                        val detailed = mat.uuid?.let { detailedMaterialsMap[it] }
-                        val fileUrl = detailed?.urls?.find { it.type == "download" || it.type == "view" || it.type == "player" }?.url
-                            ?: detailed?.urls?.firstOrNull()?.url
-                            ?: mat.urls?.firstOrNull()?.url
-                            ?: if (!mat.uuid.isNullOrBlank()) "https://uchebnik.mos.ru/cms/materials/${mat.uuid}/view" else null
-
-                        val matTitle = detailed?.title?.takeIf { it.isNotBlank() }
-                            ?: mat.title?.takeIf { it.isNotBlank() }
-                            ?: "Материал к уроку"
-
-                        val matTypeName = detailed?.typeName?.takeIf { it.isNotBlank() }
-                            ?: mat.typeName?.takeIf { it.isNotBlank() }
-                            ?: when {
-                                type.contains("pdf") -> "Документ PDF"
-                                type.contains("doc") -> "Документ"
-                                type.contains("presentation") || type.contains("ppt") -> "Презентация"
-                                type.contains("image") || type.contains("pic") -> "Изображение"
-                                else -> "Прикрепленный файл"
-                            }
-
-                        if (!fileUrl.isNullOrBlank()) {
+                        if (!directFileUrl.isNullOrBlank()) {
                             fileMaterials.add(
                                 LessonMaterialItem(
-                                    title = matTitle,
-                                    typeName = matTypeName,
-                                    url = fileUrl,
+                                    title = cleanTitle,
+                                    typeName = cleanTypeName,
+                                    url = directFileUrl,
                                     isFile = true
                                 )
                             )
+                        }
+                    } else {
+                        val isTest = type.contains("test") ||
+                            type == "kim_variant" ||
+                            type == "test_specification" ||
+                            type == "final_test" ||
+                            type == "functional_grammar_test" ||
+                            typeName.contains("тест") ||
+                            title.contains("тест") ||
+                            actionName.contains("пройти") ||
+                            actionName.contains("изучить")
+
+                        if (isTest) {
+                            val detailed = mat.uuid?.let { detailedMaterialsMap[it] }
+                            val launchUrl = detailed?.urls?.find { it.type == "launch" }?.url
+                                ?: detailed?.urls?.firstOrNull()?.url
+                                ?: mat.urls?.firstOrNull()?.url
+
+                            val finalUrl = when {
+                                !launchUrl.isNullOrBlank() -> launchUrl
+                                !mat.uuid.isNullOrBlank() -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.uuid}/launch", "UTF-8")}"
+                                mat.id != null -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.id}/launch", "UTF-8")}"
+                                else -> "https://uchebnik.mos.ru"
+                            }
+
+                            val matTitle = detailed?.title?.takeIf { it.isNotBlank() }
+                                ?: mat.title?.takeIf { it.isNotBlank() }
+                                ?: detailed?.typeName?.takeIf { it.isNotBlank() }
+                                ?: mat.typeName?.takeIf { it.isNotBlank() }
+                                ?: "Тестовое задание"
+
+                            val matTypeName = detailed?.typeName?.takeIf { it.isNotBlank() }
+                                ?: mat.typeName?.takeIf { it.isNotBlank() }
+                                ?: "Тест"
+
+                            testMaterials.add(
+                                LessonMaterialItem(
+                                    title = matTitle,
+                                    typeName = matTypeName,
+                                    url = finalUrl,
+                                    isFile = false
+                                )
+                            )
+                        } else {
+                            val detailed = mat.uuid?.let { detailedMaterialsMap[it] }
+                            val fileUrl = detailed?.urls?.find { it.type == "download" || it.type == "view" || it.type == "player" }?.url
+                                ?: detailed?.urls?.firstOrNull()?.url
+                                ?: mat.urls?.firstOrNull()?.url
+                                ?: if (!mat.uuid.isNullOrBlank()) "https://uchebnik.mos.ru/cms/materials/${mat.uuid}/view" else null
+
+                            val matTitle = detailed?.title?.takeIf { it.isNotBlank() }
+                                ?: mat.title?.takeIf { it.isNotBlank() }
+                                ?: "Материал к уроку"
+
+                            val matTypeName = detailed?.typeName?.takeIf { it.isNotBlank() }
+                                ?: mat.typeName?.takeIf { it.isNotBlank() }
+                                ?: when {
+                                    type.contains("pdf") -> "Документ PDF"
+                                    type.contains("doc") -> "Документ"
+                                    type.contains("presentation") || type.contains("ppt") -> "Презентация"
+                                    type.contains("image") || type.contains("pic") -> "Изображение"
+                                    else -> "Прикрепленный файл"
+                                }
+
+                            if (!fileUrl.isNullOrBlank()) {
+                                fileMaterials.add(
+                                    LessonMaterialItem(
+                                        title = matTitle,
+                                        typeName = matTypeName,
+                                        url = fileUrl,
+                                        isFile = true
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -2706,7 +2622,8 @@ class MeshRepository(val sessionManager: SessionManager) {
                     homework = hw,
                     topic = b.details?.lessonTopic,
                     testMaterials = testMaterials,
-                    fileMaterials = fileMaterials
+                    fileMaterials = fileMaterials,
+                    materialsCount = fileMaterials.size + testMaterials.size
                 )
             }
         } catch (_: Exception) {}
@@ -2921,6 +2838,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                     val currentDayLessons = eventMap.getOrPut(dateKey) { mutableListOf() }
                     val lessonNum = currentDayLessons.size + 1
 
+                    val eventMatCount = (ev.homework?.materials?.let { (it.countHomework ?: 0) + (it.countLearn ?: 0) + (it.countExecute ?: 0) } ?: 0) +
+                        (ev.materials?.let { (it.countHomework ?: 0) + (it.countLearn ?: 0) + (it.countExecute ?: 0) } ?: 0)
+
                     val lessonItem = LessonScheduleItem(
                         id = ev.id?.toString() ?: "ev_${lessonNum}_$dateKey",
                         subject = ev.subjectName ?: "Урок",
@@ -2940,18 +2860,34 @@ class MeshRepository(val sessionManager: SessionManager) {
                         markId = firstMark?.id,
                         markWeight = markW,
                         markComment = firstMark?.comment,
-                        homework = hwDesc
+                        homework = hwDesc,
+                        topic = ev.lessonTheme ?: ev.title,
+                        materialsCount = eventMatCount
                     )
                     currentDayLessons.add(lessonItem)
                 }
 
-                if (eventMap.isNotEmpty()) {
-                    val updated = _weekSchedule.value.toMutableMap()
-                    updated.putAll(eventMap)
-                    _weekSchedule.value = updated
-                    sessionManager.cachedWeekSchedule = updated
-                    return@withContext true
-                }
+                val updated = _weekSchedule.value.toMutableMap()
+                try {
+                    val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    val curD = sdfDate.parse(beginDate)
+                    val endD = sdfDate.parse(endDate)
+                    if (curD != null && endD != null) {
+                        val walkCal = java.util.Calendar.getInstance().apply { time = curD }
+                        while (!walkCal.time.after(endD)) {
+                            val dStr = sdfDate.format(walkCal.time)
+                            if (!eventMap.containsKey(dStr) && !updated.containsKey(dStr)) {
+                                updated[dStr] = emptyList()
+                            }
+                            walkCal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                updated.putAll(eventMap)
+                _weekSchedule.value = updated
+                sessionManager.cachedWeekSchedule = updated
+                return@withContext true
             }
         } catch (_: Exception) {}
         false
@@ -2961,5 +2897,239 @@ class MeshRepository(val sessionManager: SessionManager) {
         sessionManager.logout()
         sessionManager.clear()
         loadDemoData()
+    }
+
+    private fun updateMergedAttendance(
+        attDto: AttendanceResponseDTO? = rawAttendanceDto,
+        visits: List<SchoolVisitRecord> = _attendance.value.visits,
+        emias: List<EmiasRecord> = _attendance.value.emiasCertificates
+    ) {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val todayStr = sdf.format(Date())
+        val yesterdayCal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+        val yesterdayStr = sdf.format(yesterdayCal.time)
+
+        val visitsByDate = mutableMapOf<String, SchoolVisitRecord>()
+        visits.forEach { v ->
+            if (v.rawDate.isNotBlank()) {
+                visitsByDate[v.rawDate] = v
+            }
+        }
+
+        val attDays = attDto?.attendance.orEmpty()
+        val attByDate = mutableMapOf<String, AttendanceDayItemDTO>()
+        attDays.forEach { day ->
+            if (day.date.isNotBlank()) {
+                attByDate[day.date] = day
+            }
+        }
+
+        // Planned Absences
+        val plannedList = mutableListOf<PlannedAbsenceItem>()
+        attDays.forEach { day ->
+            val isPlanned = day.reasonId == 6 || day.reasonId == 9 || day.notified == true ||
+                day.lessons.any { it.notified == true || it.reasonId == 6 || it.reasonId == 9 }
+            if (isPlanned) {
+                val missed = day.lessons.map { l ->
+                    val sched = findLessonInSchedule(day.date, l.scheduleItemId, l.subjectName, l.bellId)
+                    val tStr = when {
+                        !l.beginTime.isNullOrBlank() && !l.endTime.isNullOrBlank() -> "${l.beginTime}—${l.endTime}"
+                        sched != null && sched.startTime.isNotBlank() -> "${sched.startTime}—${sched.endTime}"
+                        else -> ""
+                    }
+                    MissedLessonItem(
+                        lessonNumber = sched?.lessonNumber ?: 1,
+                        subjectName = l.subjectName ?: sched?.subject ?: "Урок",
+                        timeStr = tStr,
+                        theme = sched?.topic ?: "",
+                        reason = getAttendanceReasonName(l.reasonId ?: day.reasonId, l.healthStatus, l.notified ?: day.notified),
+                        description = l.description ?: day.description ?: "",
+                        isExcused = true,
+                        isNotified = l.notified == true || day.notified == true,
+                        isPlanned = true
+                    )
+                }
+                val cnt = if (missed.isNotEmpty()) missed.size else 1
+                val cntFormatted = when {
+                    cnt % 10 == 1 && cnt % 100 != 11 -> "$cnt урок"
+                    cnt % 10 in 2..4 && (cnt % 100 < 10 || cnt % 100 >= 20) -> "$cnt урока"
+                    else -> "$cnt уроков"
+                }
+                val shortDate = formatShortAbsenceDate(day.date)
+                val desc = day.description?.takeIf { it.isNotBlank() }
+                    ?: missed.mapNotNull { it.description.takeIf { d -> d.isNotBlank() } }.firstOrNull()
+                    ?: "Запланированный пропуск"
+                plannedList.add(
+                    PlannedAbsenceItem(
+                        id = "plan_${day.date}",
+                        date = day.date,
+                        dateFormatted = shortDate,
+                        lessonsCount = cnt,
+                        lessonsCountFormatted = cntFormatted,
+                        description = desc,
+                        reasonName = getAttendanceReasonName(day.reasonId, null, day.notified),
+                        lessons = missed
+                    )
+                )
+            }
+        }
+        val sortedPlanned = plannedList.sortedBy { it.date }
+
+        // Merged Days Timeline
+        val allDates = (visitsByDate.keys + attByDate.keys).distinct().sortedDescending()
+        val timelineDays = allDates.map { dStr ->
+            val visit = visitsByDate[dStr]
+            val attDay = attByDate[dStr]
+            val isToday = (dStr == todayStr)
+            val isYesterday = (dStr == yesterdayStr)
+            val isFuture = (dStr > todayStr)
+            val (dateFmt, dow) = formatTimelineDay(dStr, isToday, isYesterday)
+
+            val missed = attDay?.lessons.orEmpty().map { l ->
+                val sched = findLessonInSchedule(dStr, l.scheduleItemId, l.subjectName, l.bellId)
+                val tStr = when {
+                    !l.beginTime.isNullOrBlank() && !l.endTime.isNullOrBlank() -> "${l.beginTime}—${l.endTime}"
+                    sched != null && sched.startTime.isNotBlank() -> "${sched.startTime}—${sched.endTime}"
+                    else -> ""
+                }
+                val isPlan = l.reasonId == 6 || l.reasonId == 9 || l.notified == true || attDay?.notified == true
+                MissedLessonItem(
+                    lessonNumber = sched?.lessonNumber ?: 1,
+                    subjectName = l.subjectName ?: sched?.subject ?: "Урок",
+                    timeStr = tStr,
+                    theme = sched?.topic ?: "",
+                    reason = getAttendanceReasonName(l.reasonId ?: attDay?.reasonId, l.healthStatus, l.notified ?: attDay?.notified),
+                    description = l.description ?: attDay?.description ?: "",
+                    isExcused = isAttendanceExcused(l.reasonId ?: attDay?.reasonId, l.healthStatus, l.notified ?: attDay?.notified),
+                    isNotified = l.notified == true || attDay?.notified == true,
+                    isPlanned = isPlan
+                )
+            }
+
+            val plan = sortedPlanned.find { it.date == dStr }
+            val hasIll = attDay?.lessons?.any { it.healthStatus != null } == true ||
+                attDay?.reasonId == 1 || attDay?.reasonId == 5
+            val allExcused = missed.isEmpty() || missed.all { it.isExcused }
+
+            AttendanceDayRecord(
+                rawDate = dStr,
+                dateFormatted = dateFmt,
+                dayOfWeek = dow,
+                isToday = isToday,
+                isFuture = isFuture,
+                visit = visit,
+                missedLessons = missed,
+                plannedAbsence = plan,
+                hasIllness = hasIll,
+                isExcused = allExcused,
+                summary = attDay?.summary ?: ""
+            )
+        }
+
+        // Real attendance stats (up to today)
+        var totalMissed = 0
+        var excused = 0
+        var unexcused = 0
+        var illness = 0
+        attDays.filter { it.date <= todayStr }.forEach { day ->
+            if (day.lessons.isNotEmpty()) {
+                day.lessons.forEach { l ->
+                    totalMissed++
+                    val isEx = isAttendanceExcused(l.reasonId ?: day.reasonId, l.healthStatus, l.notified ?: day.notified)
+                    if (isEx) excused++ else unexcused++
+                    if (l.healthStatus != null || l.reasonId == 1 || l.reasonId == 5) illness++
+                }
+            } else if (day.reasonId != null || day.notified == true) {
+                totalMissed += 6
+                val isEx = isAttendanceExcused(day.reasonId, null, day.notified)
+                if (isEx) excused += 6 else unexcused += 6
+                if (day.reasonId == 1 || day.reasonId == 5) illness += 6
+            }
+        }
+
+        val updated = AttendanceSummary(
+            totalLessons = totalMissed,
+            attendedLessons = if (totalMissed > 0) 100 else 0,
+            excusedAbsences = excused,
+            unexcusedAbsences = unexcused,
+            percentage = 100.0,
+            totalAbsenceLessons = totalMissed,
+            illnessAbsences = illness,
+            plannedAbsencesCount = sortedPlanned.size,
+            plannedAbsences = sortedPlanned,
+            days = timelineDays,
+            emiasCertificates = emias,
+            visits = visits
+        )
+
+        _attendance.value = updated
+        sessionManager.cachedAttendance = updated
+    }
+
+    private fun findLessonInSchedule(date: String, scheduleItemId: Long?, subjectName: String?, bellId: Long?): LessonScheduleItem? {
+        val dayLessons = _weekSchedule.value[date].orEmpty()
+        if (dayLessons.isEmpty()) return null
+        if (scheduleItemId != null && scheduleItemId > 0) {
+            val byId = dayLessons.find { it.id == scheduleItemId.toString() || it.id.endsWith("_$scheduleItemId") }
+            if (byId != null) return byId
+        }
+        if (!subjectName.isNullOrBlank()) {
+            val bySubj = dayLessons.find { it.subject.equals(subjectName, ignoreCase = true) }
+            if (bySubj != null) return bySubj
+        }
+        return null
+    }
+
+    private fun getAttendanceReasonName(reasonId: Int?, healthStatus: String?, notified: Boolean?): String {
+        if (healthStatus == "SICK" || healthStatus == "SICK_WITH_INFECTION") return "Пропуск по болезни"
+        if (healthStatus == "EXEMPT") return "Освобождение"
+        return when (reasonId) {
+            1 -> "Пропуск по болезни"
+            2 -> "Пропуск по самочувствию"
+            3 -> "Пропуск по семейным обстоятельствам"
+            4 -> "Пропуск без уведомления"
+            5 -> "Пропуск по болезни (ЕМИАС)"
+            6 -> "Запланированный пропуск"
+            7 -> "Карантин"
+            8 -> "Пропуск без уведомления"
+            9 -> "Запланированный пропуск"
+            10 -> "Индивидуальный учебный план"
+            11 -> "Каникулы"
+            12 -> "Каникулы"
+            else -> if (notified == true) "Запланированный пропуск" else "Пропуск без уведомления"
+        }
+    }
+
+    private fun isAttendanceExcused(reasonId: Int?, healthStatus: String?, notified: Boolean?): Boolean {
+        if (healthStatus != null) return true
+        if (notified == true) return true
+        return when (reasonId) {
+            1, 2, 3, 5, 6, 7, 9, 10, 11, 12 -> true
+            else -> false
+        }
+    }
+
+    private fun formatShortAbsenceDate(isoDate: String): String {
+        return try {
+            val d = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(isoDate)
+            if (d != null) {
+                SimpleDateFormat("d MMM", Locale("ru")).format(d).trimEnd('.')
+            } else isoDate
+        } catch (_: Exception) { isoDate }
+    }
+
+    private fun formatTimelineDay(isoDate: String, isToday: Boolean, isYesterday: Boolean): Pair<String, String> {
+        return try {
+            val d = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(isoDate)
+            if (d != null) {
+                val dateFmt = SimpleDateFormat("d MMMM", Locale("ru")).format(d)
+                val dow = when {
+                    isToday -> "сегодня"
+                    isYesterday -> "вчера"
+                    else -> SimpleDateFormat("EEEE", Locale("ru")).format(d).lowercase()
+                }
+                dateFmt to dow
+            } else isoDate to ""
+        } catch (_: Exception) { isoDate to "" }
     }
 }

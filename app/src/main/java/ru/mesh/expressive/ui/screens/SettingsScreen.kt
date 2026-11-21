@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +46,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val uriHandler = LocalUriHandler.current
     val profile by viewModel.studentProfile.collectAsState()
     val isCompactSchedule by viewModel.isCompactSchedule.collectAsState()
     val showWeightedGpa by viewModel.showWeightedGpa.collectAsState()
@@ -56,6 +58,8 @@ fun SettingsScreen(
     val gamification by viewModel.gamificationProfile.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    val isAmoledDark by viewModel.isAmoledDark.collectAsState()
+    val studyPeriodMode by viewModel.studyPeriodMode.collectAsState()
     val startTab by viewModel.startTab.collectAsState()
     val hapticFeedbackEnabled by viewModel.hapticFeedbackEnabled.collectAsState()
     val hideCompletedHomework by viewModel.hideCompletedHomework.collectAsState()
@@ -340,6 +344,17 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
+                    // AMOLED Black Switch
+                    SettingsToggleRow(
+                        icon = Icons.Default.Contrast,
+                        title = "AMOLED чёрный",
+                        subtitle = "Чистый чёрный фон (#000000) для OLED-экранов в тёмной теме",
+                        isChecked = isAmoledDark,
+                        onCheckedChange = { viewModel.toggleAmoledDark(it) }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
                     // Monet Dynamic Theme
                     SettingsToggleRow(
                         icon = Icons.Default.Palette,
@@ -499,6 +514,39 @@ fun SettingsScreen(
                         isChecked = showWeightedGpa,
                         onCheckedChange = { viewModel.toggleShowWeightedGpa(it) }
                     )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Study Periods Mode Selector
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text("Оценочные периоды", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text("Автоопределение по API МЭШ или ручной выбор", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        val periodOptions = remember {
+                            listOf(
+                                "AUTO" to "Авто",
+                                "SEMESTERS" to "Полугодия",
+                                "QUARTERS" to "Четверти",
+                                "TRIMESTERS" to "Триместры",
+                                "MODULES" to "Модули"
+                            )
+                        }
+                        val selectedPair = periodOptions.find { it.first == studyPeriodMode } ?: periodOptions.first()
+                        ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                            items = periodOptions,
+                            selectedItem = selectedPair,
+                            onItemSelected = { viewModel.setStudyPeriodMode(it.first) },
+                            label = { it.second },
+                            scrollable = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
@@ -753,9 +801,43 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    uriHandler.openUri("https://github.com/borichdev/mesh_expressive")
+                                } catch (_: Exception) {}
+                            },
+                            shape = PillShape,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("GitHub Форк", style = MaterialTheme.typography.labelSmall)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    uriHandler.openUri("https://github.com/ametistik1337/mesh_expressive")
+                                } catch (_: Exception) {}
+                            },
+                            shape = PillShape,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFFE91E63))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Оригинал", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "semi vibecoded by gemini",
+                        text = "Форк: borichdev • Оригинальный автор: ametistik1337",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)

@@ -154,6 +154,14 @@ class SessionManager(context: Context) {
         get() = prefs.getString("theme_mode", "SYSTEM") ?: "SYSTEM"
         set(value) = prefs.edit().putString("theme_mode", value).apply()
 
+    var isAmoledDark: Boolean
+        get() = prefs.getBoolean("is_amoled_dark", false)
+        set(value) = prefs.edit().putBoolean("is_amoled_dark", value).apply()
+
+    var studyPeriodMode: String
+        get() = prefs.getString("study_period_mode", "AUTO") ?: "AUTO"
+        set(value) = prefs.edit().putString("study_period_mode", value).apply()
+
     // ======================== Cache Storage ========================
 
     private fun saveJson(key: String, value: Any?) {
@@ -182,15 +190,39 @@ class SessionManager(context: Context) {
         set(value) = saveJson("cached_profile", value)
 
     var cachedScheduleToday: List<LessonScheduleItem>?
-        get() = getJson("cached_schedule_today")
+        get() {
+            val json = prefs.getString("cached_schedule_today", null) ?: return null
+            return try {
+                val type = object : TypeToken<List<LessonScheduleItem>>() {}.type
+                gson.fromJson(json, type)
+            } catch (_: Exception) {
+                null
+            }
+        }
         set(value) = saveJson("cached_schedule_today", value)
 
     var cachedScheduleTomorrow: List<LessonScheduleItem>?
-        get() = getJson("cached_schedule_tomorrow")
+        get() {
+            val json = prefs.getString("cached_schedule_tomorrow", null) ?: return null
+            return try {
+                val type = object : TypeToken<List<LessonScheduleItem>>() {}.type
+                gson.fromJson(json, type)
+            } catch (_: Exception) {
+                null
+            }
+        }
         set(value) = saveJson("cached_schedule_tomorrow", value)
 
     var cachedWeekSchedule: Map<String, List<LessonScheduleItem>>?
-        get() = getJson("cached_week_schedule")
+        get() {
+            val json = prefs.getString("cached_week_schedule", null) ?: return null
+            return try {
+                val type = object : TypeToken<Map<String, List<LessonScheduleItem>>>() {}.type
+                gson.fromJson(json, type)
+            } catch (_: Exception) {
+                null
+            }
+        }
         set(value) = saveJson("cached_week_schedule", value)
 
     var cachedHomeworkList: List<HomeworkItem>?

@@ -54,7 +54,8 @@ data class LessonScheduleItem(
     val isPointCorrected: Boolean = false,
     val hasCorrection: Boolean = false,
     val testMaterials: List<LessonMaterialItem> = emptyList(),
-    val fileMaterials: List<LessonMaterialItem> = emptyList()
+    val fileMaterials: List<LessonMaterialItem> = emptyList(),
+    val materialsCount: Int = 0
 ) {
     val isPointExpired: Boolean
         get() {
@@ -65,8 +66,8 @@ data class LessonScheduleItem(
             if (!pDate.isNullOrBlank()) {
                 return pDate < todayStr
             }
-            val mDate = date.substringBefore("T")?.trim()
-            if (!mDate.isNullOrBlank()) {
+            val mDate = date.substringBefore("T").trim()
+            if (mDate.isNotBlank()) {
                 try {
                     val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
                     val d = sdf.parse(mDate)
@@ -111,8 +112,12 @@ data class LessonDetailInnerDTO(
 
 data class LessonDetailHomeworkDTO(
     @SerializedName("homework") val homework: String? = null,
+    @SerializedName("homework_id") val homeworkId: Long? = null,
+    @SerializedName("homework_entry_id") val homeworkEntryId: Long? = null,
     @SerializedName("homework_entry_student_id") val homeworkEntryStudentId: Long? = null,
-    @SerializedName("is_done") val isDone: Boolean? = null
+    @SerializedName("homework_created_at") val createdAt: String? = null,
+    @SerializedName("is_done") val isDone: Boolean? = null,
+    @SerializedName("additional_materials") val additionalMaterials: List<LessonMaterialDTO>? = null
 )
 
 data class LessonDetailMarkDTO(
@@ -329,14 +334,25 @@ data class EventCalendarItemDTO(
     @SerializedName("teacher") val teacher: TeacherResponseDTO? = null,
     @SerializedName("author") val author: TeacherResponseDTO? = null,
     @SerializedName("homework") val homework: EventHomeworkDTO? = null,
-    @SerializedName("marks") val marks: List<EventMarkDTO>? = null
+    @SerializedName("materials") val materials: EventMaterialsCountDTO? = null,
+    @SerializedName("marks") val marks: List<EventMarkDTO>? = null,
+    @SerializedName("lesson_theme") val lessonTheme: String? = null,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("bell_id") val bellId: Long? = null
+)
+
+data class EventMaterialsCountDTO(
+    @SerializedName("count_execute") val countExecute: Int? = null,
+    @SerializedName("count_learn") val countLearn: Int? = null,
+    @SerializedName("count_homework") val countHomework: Int? = null
 )
 
 data class EventHomeworkDTO(
     @SerializedName("presence_status_id") val presenceStatusId: Int? = null,
     @SerializedName("total_count") val totalCount: Int? = null,
     @SerializedName("execute_count") val executeCount: Int? = null,
-    @SerializedName("descriptions") val descriptions: List<String>? = null
+    @SerializedName("descriptions") val descriptions: List<String>? = null,
+    @SerializedName("materials") val materials: EventMaterialsCountDTO? = null
 )
 
 data class EventMarkDTO(
@@ -446,6 +462,8 @@ data class HomeworkItem(
     val digitalTestUrl: String? = null,
     val createdAt: String? = null,
     val attachments: List<HomeworkAttachmentItem> = emptyList(),
+    val teacherFiles: List<LessonMaterialItem> = emptyList(),
+    val materialsCount: Int = 0,
     val rawDueDate: String = "",
     val rawTargetDate: String = "",
     val targetDate: String = "",
@@ -482,8 +500,8 @@ data class MarkItem(
             if (!pDate.isNullOrBlank()) {
                 return pDate < todayStr
             }
-            val mDate = date.substringBefore("T")?.trim()
-            if (!mDate.isNullOrBlank()) {
+            val mDate = date.substringBefore("T").trim()
+            if (mDate.isNotBlank()) {
                 try {
                     val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
                     val d = sdf.parse(mDate)
@@ -637,6 +655,9 @@ data class AcademicClassRankItem(
     val rankPlace: Int = 0,
     val averageMark: Double = 0.0,
     val rankStatus: String = "stable",
+    val rankPlace30: Int = 0,
+    val averageMark30: Double = 0.0,
+    val rankStatus30: String = "stable",
     val isCurrentUser: Boolean = false,
     val personId: String = "",
     val imageId: Int? = null,
@@ -894,7 +915,49 @@ data class AttendanceSummary(
     val unexcusedAbsences: Int = 0,
     val percentage: Double = 100.0,
     val emiasCertificates: List<EmiasRecord> = emptyList(),
-    val visits: List<SchoolVisitRecord> = emptyList()
+    val visits: List<SchoolVisitRecord> = emptyList(),
+    val plannedAbsences: List<PlannedAbsenceItem> = emptyList(),
+    val plannedAbsencesCount: Int = 0,
+    val totalAbsenceLessons: Int = 0,
+    val illnessAbsences: Int = 0,
+    val days: List<AttendanceDayRecord> = emptyList()
+)
+
+data class PlannedAbsenceItem(
+    val id: String = "",
+    val date: String = "",
+    val dateFormatted: String = "",
+    val lessonsCount: Int = 0,
+    val lessonsCountFormatted: String = "",
+    val description: String = "",
+    val reasonName: String = "Запланированный пропуск",
+    val lessons: List<MissedLessonItem> = emptyList()
+)
+
+data class MissedLessonItem(
+    val lessonNumber: Int = 0,
+    val subjectName: String = "",
+    val timeStr: String = "",
+    val theme: String = "",
+    val reason: String = "",
+    val description: String = "",
+    val isExcused: Boolean = true,
+    val isNotified: Boolean = false,
+    val isPlanned: Boolean = false
+)
+
+data class AttendanceDayRecord(
+    val rawDate: String = "",
+    val dateFormatted: String = "",
+    val dayOfWeek: String = "",
+    val isToday: Boolean = false,
+    val isFuture: Boolean = false,
+    val visit: SchoolVisitRecord? = null,
+    val missedLessons: List<MissedLessonItem> = emptyList(),
+    val plannedAbsence: PlannedAbsenceItem? = null,
+    val hasIllness: Boolean = false,
+    val isExcused: Boolean = true,
+    val summary: String = ""
 )
 
 data class SchoolVisitRecord(
@@ -902,7 +965,8 @@ data class SchoolVisitRecord(
     val timeIn: String = "",
     val timeOut: String = "",
     val duration: String = "",
-    val isCurrentlyInSchool: Boolean = false
+    val isCurrentlyInSchool: Boolean = false,
+    val rawDate: String = ""
 )
 
 data class EmiasRecord(

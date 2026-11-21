@@ -1,6 +1,7 @@
 package ru.mesh.expressive.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -11,12 +12,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,44 +29,56 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ru.mesh.expressive.ui.components.ExpressiveEmptyState
 import ru.mesh.expressive.ui.components.ExpressivePullToRefreshBox
+import ru.mesh.expressive.ui.components.M3ConnectedButtonGroup
 import ru.mesh.expressive.ui.theme.*
 import ru.mesh.expressive.ui.viewmodel.MeshMainViewModel
+import ru.mesh.expressive.ui.viewmodel.RatingPeriodMode
 import java.util.Locale
 
 @Composable
 fun RatingScreen(viewModel: MeshMainViewModel) {
     val rating by viewModel.ratingInfo.collectAsState()
     val academicRanks by viewModel.academicClassRanks.collectAsState()
+    val semesterAcademicRanks by viewModel.semesterAcademicRanks.collectAsState()
     val classmates by viewModel.classmates.collectAsState()
     val profile by viewModel.studentProfile.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     val subjectSummaries by viewModel.subjectSummaries.collectAsState()
-    val showWeightedGpa by viewModel.showWeightedGpa.collectAsState()
     val selectedRatingSubjectId by viewModel.selectedRatingSubjectId.collectAsState()
     val subjectAcademicRanks by viewModel.subjectAcademicRanks.collectAsState()
     val isSubjectRankLoading by viewModel.isSubjectRankLoading.collectAsState()
+    val ratingPeriodMode by viewModel.ratingPeriodMode.collectAsState()
+    var showGpaInfoDialog by remember { mutableStateOf(false) }
 
-    val liveGpa = remember(subjectSummaries, showWeightedGpa) {
-        val allMarks = subjectSummaries.flatMap { it.marks }
-        if (allMarks.isNotEmpty()) {
-            if (showWeightedGpa) {
-                val totalWeight = allMarks.sumOf { it.weight }
-                if (totalWeight > 0.0) {
-                    allMarks.sumOf { it.value * it.weight } / totalWeight
-                } else {
-                    allMarks.map { it.value }.average()
-                }
-            } else {
-                allMarks.map { it.value }.average()
-            }
-        } else {
-            val avgs = subjectSummaries.map { it.getEffectiveAverage(showWeightedGpa) }.filter { it > 0.0 }
-            if (avgs.isNotEmpty()) avgs.average() else 0.0
+    val rawRanks = remember(selectedRatingSubjectId, ratingPeriodMode, subjectAcademicRanks, semesterAcademicRanks, academicRanks) {
+        when {
+            selectedRatingSubjectId != null -> subjectAcademicRanks
+            ratingPeriodMode == RatingPeriodMode.SEMESTER && semesterAcademicRanks.isNotEmpty() -> semesterAcademicRanks
+            else -> academicRanks
         }
     }
 
-    val currentRanks = if (selectedRatingSubjectId != null) subjectAcademicRanks else academicRanks
+    val currentRanks = remember(rawRanks, ratingPeriodMode) {
+        if (ratingPeriodMode == RatingPeriodMode.MONTH) {
+            rawRanks
+                .filter { it.averageMark30 > 0.0 || it.rankPlace30 > 0 }
+                .map { item ->
+                    item.copy(
+                        rankPlace = item.rankPlace30,
+                        averageMark = item.averageMark30,
+                        rankStatus = item.rankStatus30
+                    )
+                }
+                .sortedWith(
+                    compareBy<ru.mesh.expressive.data.model.AcademicClassRankItem> {
+                        if (it.rankPlace > 0) it.rankPlace else Int.MAX_VALUE
+                    }.thenByDescending { it.averageMark }
+                )
+        } else {
+            rawRanks
+        }
+    }
 
     val unratedStudents = androidx.compose.runtime.remember(classmates, currentRanks) {
         val ratedPids = currentRanks.map { it.profileId }.filter { it > 0 }.toSet()
@@ -98,16 +114,21 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
                     )
                 ) {
                     val myRankItem = currentRanks.find { it.isCurrentUser }
-                    val effectiveClassRank = myRankItem?.rankPlace?.takeIf { it > 0 } ?: rating.classRank
-                    val effectiveAvg = myRankItem?.averageMark?.takeIf { it > 0.0 } ?: (if (liveGpa > 0.0) liveGpa else (rating.score / 20.0).takeIf { it > 0.0 } ?: profile.gpa)
+                    val effectiveClassRank = myRankItem?.rankPlace?.takeIf { it > 0 }
+                        ?: if (selectedRatingSubjectId == null) rating.classRank else 0
+                    val effectiveAvg = when (ratingPeriodMode) {
+                        RatingPeriodMode.MONTH -> myRankItem?.averageMark?.takeIf { it > 0.0 } ?: myRankItem?.averageMark30?.takeIf { it > 0.0 } ?: 0.0
+                        else -> myRankItem?.averageMark?.takeIf { it > 0.0 } ?: (rating.score / 20.0).takeIf { it > 0.0 } ?: 0.0
+                    }
                     val effectiveRankChange = if (myRankItem != null) {
                         if (myRankItem.rankStatus.equals("up", ignoreCase = true)) 1
                         else if (myRankItem.rankStatus.equals("down", ignoreCase = true)) -1
                         else 0
                     } else {
-                        rating.rankChange
+                        if (selectedRatingSubjectId == null) rating.rankChange else 0
                     }
-                    val totalRanked = currentRanks.size.takeIf { it > 0 } ?: rating.totalInClass
+                    val totalRanked = currentRanks.size.takeIf { it > 0 }
+                        ?: if (selectedRatingSubjectId == null) rating.totalInClass else 0
 
                     Column(modifier = Modifier.padding(20.dp)) {
                         Row(
@@ -117,7 +138,11 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (selectedRatingSubjectId != null) "Рейтинг по предмету" else "Рейтинг учащегося",
+                                    text = if (selectedRatingSubjectId != null) {
+                                        "Рейтинг по предмету • ${ratingPeriodMode.title}"
+                                    } else {
+                                        "Рейтинг учащегося • ${ratingPeriodMode.title}"
+                                    },
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                 )
@@ -160,15 +185,27 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
                                 val avgMarkFormatted = if (effectiveAvg > 0.0) String.format(Locale.US, "%.2f", effectiveAvg) else "—"
                                 Surface(
                                     shape = PillShape,
-                                    color = ScoreGreenContainer
+                                    color = ScoreGreenContainer,
+                                    modifier = Modifier.clickable { showGpaInfoDialog = true }
                                 ) {
-                                    Text(
-                                        text = "Средний балл: $avgMarkFormatted",
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ScoreGreen
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = "Средний балл: $avgMarkFormatted",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ScoreGreen
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = "О сервере МЭШ",
+                                            tint = ScoreGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
 
                                 Surface(
@@ -189,6 +226,18 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
                         }
                     }
                 }
+            }
+
+            // 1.5. Rating Period Selector (Год / Полугодие / Месяц)
+            item {
+                M3ConnectedButtonGroup(
+                    items = RatingPeriodMode.entries,
+                    selectedItem = ratingPeriodMode,
+                    onItemSelected = { viewModel.selectRatingPeriodMode(it) },
+                    label = { it.title },
+                    scrollable = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             // 2. Subject Filter Row
@@ -263,7 +312,7 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "По выбранному предмету в 1 четверти ещё не выставлено оценок ни одному ученику класса.",
+                                    text = "По выбранному предмету за этот период ещё не выставлено оценок ни одному ученику класса.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -522,5 +571,42 @@ fun RatingScreen(viewModel: MeshMainViewModel) {
                 }
             }
         }
+    }
+
+    if (showGpaInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showGpaInfoDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Обновление данных МЭШ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Рейтинг и средний балл учащегося подтягиваются напрямую с серверов МЭШ без локальных расчётов.\n\nИз-за особенностей инфраструктуры МЭШ эти показатели обновляются централизованно достаточно редко и нестабильно (как правило, один раз в сутки ночью). Свежие оценки, выставленные учителями в течение дня, учитываются сервером с задержкой.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showGpaInfoDialog = false },
+                    shape = PillShape
+                ) {
+                    Text("Понятно")
+                }
+            },
+            shape = ExpressiveCardShape
+        )
     }
 }

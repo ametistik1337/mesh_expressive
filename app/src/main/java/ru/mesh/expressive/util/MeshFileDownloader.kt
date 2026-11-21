@@ -16,6 +16,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import ru.mesh.expressive.data.local.SessionManager
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
@@ -36,7 +37,49 @@ object MeshFileDownloader {
 
     fun getMimeType(fileName: String): String {
         val extension = fileName.substringAfterLast('.', "").lowercase()
-        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "*/*"
+        return when (extension) {
+            "odt" -> "application/vnd.oasis.opendocument.text"
+            "pdf" -> "application/pdf"
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "doc" -> "application/msword"
+            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "xls" -> "application/vnd.ms-excel"
+            "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            "ppt" -> "application/vnd.ms-powerpoint"
+            "zip" -> "application/zip"
+            "rar" -> "application/x-rar-compressed"
+            "7z" -> "application/x-7z-compressed"
+            "txt" -> "text/plain"
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "*/*"
+        }
+    }
+
+    private fun getStorageDir(context: Context): File {
+        val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir, "mesh_attachments")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    fun getAttachmentFile(context: Context, fileName: String): File {
+        val safeName = fileName.replace(Regex("[/\\\\:?*\"<>|]"), "_")
+        return File(getStorageDir(context), safeName)
+    }
+
+    fun isDownloaded(context: Context, fileName: String): Boolean {
+        val file = getAttachmentFile(context, fileName)
+        return file.exists() && file.length() > 0
+    }
+
+    fun getDownloadedFileNames(context: Context): Set<String> {
+        val dir = getStorageDir(context)
+        if (!dir.exists()) return emptySet()
+        return dir.listFiles()?.filter { it.isFile && it.length() > 0 }?.map { it.name }?.toSet().orEmpty()
+    }
+
+    fun getFileUri(context: Context, file: File): Uri {
+        return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }
 
     suspend fun downloadFile(
@@ -107,86 +150,107 @@ object MeshFileDownloader {
 
             val mimeType = getMimeType(resolvedName)
 
-            // Сохранение файла
-            val savedUri = saveToDownloads(context, responseBody.byteStream(), resolvedName, mimeType)
-                ?: return@withContext DownloadResult.Error("Не удалось сохранить файл на устройство")
+            // 1. Сохраняем в локальную директорию приложения
+            val localFile = getAttachmentFile(context, resolvedName)
+            responseBody.byteStream().use { input ->
+                FileOutputStream(localFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
 
+            // 2. Также дублируем в системные Загрузки (MediaStore / Public Downloads)
+            try {
+                copyToPublicDownloads(context, localFile, resolvedName, mimeType)
+            } catch (_: Exception) {}
+
+            val savedUri = getFileUri(context, localFile)
             DownloadResult.Success(savedUri, resolvedName, mimeType)
         } catch (e: Exception) {
             DownloadResult.Error(e.localizedMessage ?: "Ошибка скачивания файла")
         }
     }
 
-    private fun saveToDownloads(
+    private fun copyToPublicDownloads(
         context: Context,
-        inputStream: InputStream,
+        sourceFile: File,
         fileName: String,
         mimeType: String
-    ): Uri? {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                    put(MediaStore.Downloads.MIME_TYPE, mimeType)
-                    put(MediaStore.Downloads.IS_PENDING, 1)
-                }
-
-                val resolver = context.contentResolver
-                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-                    ?: return null
-
-                resolver.openOutputStream(uri)?.use { output ->
-                    inputStream.copyTo(output)
-                }
-
-                contentValues.clear()
-                contentValues.put(MediaStore.Downloads.IS_PENDING, 0)
-                resolver.update(uri, contentValues, null, null)
-                uri
-            } else {
-                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                if (!downloadsDir.exists()) downloadsDir.mkdirs()
-
-                var file = File(downloadsDir, fileName)
-                var counter = 1
-                val base = fileName.substringBeforeLast('.')
-                val ext = fileName.substringAfterLast('.', "")
-                while (file.exists()) {
-                    val newName = if (ext.isNotBlank()) "${base}_$counter.$ext" else "${base}_$counter"
-                    file = File(downloadsDir, newName)
-                    counter++
-                }
-
-                FileOutputStream(file).use { output ->
-                    inputStream.copyTo(output)
-                }
-                Uri.fromFile(file)
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                put(MediaStore.Downloads.IS_PENDING, 1)
             }
-        } catch (_: Exception) {
-            // Резервное сохранение в файлы приложения с FileProvider
-            try {
-                val cacheDir = File(context.cacheDir, "downloads").apply { if (!exists()) mkdirs() }
-                val file = File(cacheDir, fileName)
-                FileOutputStream(file).use { output ->
-                    inputStream.copyTo(output)
+
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return
+
+            resolver.openOutputStream(uri)?.use { output ->
+                FileInputStream(sourceFile).use { input ->
+                    input.copyTo(output)
                 }
-                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            } catch (_: Exception) {
-                null
+            }
+
+            contentValues.clear()
+            contentValues.put(MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(uri, contentValues, null, null)
+        } else {
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            if (!downloadsDir.exists()) downloadsDir.mkdirs()
+
+            var dest = File(downloadsDir, fileName)
+            var counter = 1
+            val base = fileName.substringBeforeLast('.')
+            val ext = fileName.substringAfterLast('.', "")
+            while (dest.exists()) {
+                val newName = if (ext.isNotBlank()) "${base}_$counter.$ext" else "${base}_$counter"
+                dest = File(downloadsDir, newName)
+                counter++
+            }
+
+            FileInputStream(sourceFile).use { input ->
+                FileOutputStream(dest).use { output ->
+                    input.copyTo(output)
+                }
             }
         }
     }
 
-    fun openFile(context: Context, uri: Uri, mimeType: String) {
+    fun openFile(context: Context, uri: Uri, mimeType: String, title: String = "Открыть файл") {
         try {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(intent)
+            val chooser = Intent.createChooser(intent, title).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
         } catch (_: Exception) {
             Toast.makeText(context, "Не найдено приложение для открытия файла", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun shareFile(context: Context, fileName: String) {
+        try {
+            val localFile = getAttachmentFile(context, fileName)
+            if (!localFile.exists()) return
+            val uri = getFileUri(context, localFile)
+            val mimeType = getMimeType(fileName)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooser = Intent.createChooser(intent, "Поделиться файлом").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        } catch (_: Exception) {
+            Toast.makeText(context, "Не удалось поделиться файлом", Toast.LENGTH_SHORT).show()
         }
     }
 }

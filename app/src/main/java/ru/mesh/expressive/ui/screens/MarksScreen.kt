@@ -53,55 +53,21 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
     var selectedSubjectForCalc by remember { mutableStateOf<SubjectSummary?>(null) }
 
     val periodsSchedules by viewModel.periodsSchedules.collectAsState()
+    val studyPeriodMode by viewModel.studyPeriodMode.collectAsState()
+    val studentProfile by viewModel.studentProfile.collectAsState()
 
-    // 1. Вычисляем список учебных периодов (четвертей/семестров) из API с автоопределением активного
-    val studyPeriods = remember(periodsSchedules) {
-        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-        val groups = mutableMapOf<String, MutableList<String>>()
-        periodsSchedules.forEach { item ->
-            val t = item.title.trim()
-            if (t.contains("четверть", ignoreCase = true) ||
-                t.contains("семестр", ignoreCase = true) ||
-                t.contains("триместр", ignoreCase = true)) {
-                groups.getOrPut(t) { mutableListOf() }.add(item.date)
-            }
-        }
-        val list = if (groups.isEmpty()) {
-            listOf(
-                StudyPeriodOption("1", "1 четверть", "1 четв.", "2026-09-01", "2026-10-23", false),
-                StudyPeriodOption("2", "2 четверть", "2 четв.", "2026-11-04", "2026-12-30", true),
-                StudyPeriodOption("3", "3 четверть", "3 четв.", "2027-01-11", "2027-03-12", false),
-                StudyPeriodOption("4", "4 четверть", "4 четв.", "2027-03-22", "2027-05-31", false)
-            )
-        } else {
-            val sorted = groups.map { (title, dates) ->
-                val start = dates.minOrNull() ?: ""
-                val end = dates.maxOrNull() ?: ""
-                val isCur = today in start..end
-                val shortT = title.replace(" четверть", " четв.").replace(" семестр", " сем.").replace(" триместр", " трим.")
-                StudyPeriodOption(
-                    id = title,
-                    title = title,
-                    shortTitle = shortT,
-                    startDate = start,
-                    endDate = end,
-                    isCurrent = isCur
-                )
-            }.sortedBy { it.startDate }
-
-            val hasCurrent = sorted.any { it.isCurrent }
-            if (!hasCurrent && sorted.isNotEmpty()) {
-                val nextOrLast = sorted.firstOrNull { it.startDate > today } ?: sorted.last()
-                sorted.map { if (it.id == nextOrLast.id) it.copy(isCurrent = true) else it }
-            } else {
-                sorted
-            }
-        }
-        list
+    // 1. Вычисляем список учебных периодов (четверти / триместры / полугодия / модули) из API или настройки
+    val studyPeriods = remember(periodsSchedules, subjectSummaries, studyPeriodMode, studentProfile.className) {
+        ru.mesh.expressive.util.DateUtils.resolveStudyPeriods(
+            periodsSchedules = periodsSchedules,
+            subjectSummaries = subjectSummaries,
+            periodMode = studyPeriodMode,
+            className = studentProfile.className
+        )
     }
 
     val allPeriodsOption = remember {
-        StudyPeriodOption(id = "all", title = "Все четверти", shortTitle = "Все", startDate = "", endDate = "", isCurrent = false)
+        StudyPeriodOption(id = "all", title = "Весь год", shortTitle = "Все", startDate = "", endDate = "", isCurrent = false)
     }
 
     val periodOptions = remember(studyPeriods) {
@@ -205,30 +171,13 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
             )
     }
 
+    var showGpaInfoDialog by remember { mutableStateOf(false) }
     val activeGpa by viewModel.activeGpa.collectAsState()
-    val displayGpa = remember(displaySubjectSummaries, showWeightedGpa, activeGpa, selectedPeriod) {
-        if (selectedPeriod.id == "all") {
-            activeGpa
-        } else {
-            val allMarks = displaySubjectSummaries.flatMap { it.marks }
-                .filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
-            if (allMarks.isNotEmpty()) {
-                if (showWeightedGpa) {
-                    val wTotal = allMarks.sumOf { it.weight }
-                    if (wTotal > 0.0) allMarks.sumOf { it.effectiveValue * it.weight } / wTotal else 0.0
-                } else {
-                    allMarks.map { it.effectiveValue }.average()
-                }
-            } else {
-                val nonZeroAverages = displaySubjectSummaries.map { it.averageMark }.filter { it > 0.0 }
-                if (nonZeroAverages.isNotEmpty()) nonZeroAverages.average() else 0.0
-            }
-        }
-    }
+    val displayGpa = activeGpa
 
     val periodSubtitle = remember(selectedPeriod) {
         if (selectedPeriod.id == "all") {
-            "Все учебные периоды 2026/2027 учебного года"
+            "Все учебные периоды ${ru.mesh.expressive.util.DateUtils.getAcademicYearLabel()} учебного года"
         } else {
             val startFormatted = ru.mesh.expressive.util.DateUtils.formatPointDate(selectedPeriod.startDate)
             val endFormatted = ru.mesh.expressive.util.DateUtils.formatPointDate(selectedPeriod.endDate)
@@ -271,18 +220,34 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = gpaLabel,
+                                        text = "Средний балл (МЭШ)",
                                         style = MaterialTheme.typography.labelLarge,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                     )
-                                    Text(
-                                        text = if (displayGpa > 0.0) "Средний балл: ${String.format(java.util.Locale.US, "%.2f", displayGpa)}" else "Средний балл: —",
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = if (displayGpa > 0.0) "Средний балл: ${String.format(java.util.Locale.US, "%.2f", displayGpa)}" else "Средний балл: —",
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        IconButton(
+                                            onClick = { showGpaInfoDialog = true },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Info,
+                                                contentDescription = "Информация об обновлении балла",
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
@@ -492,7 +457,7 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "В МЭШ средний балл от 4.60 округляется в итоговую «5» за четверть",
+                                text = "В МЭШ средний балл от 4.60 округляется в итоговую «5» за период",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                             )
@@ -508,6 +473,43 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                     Text("Понятно")
                 }
             }
+        )
+    }
+
+    if (showGpaInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showGpaInfoDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Обновление данных МЭШ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Средний балл и рейтинг учащегося подтягиваются напрямую с серверов МЭШ без локальных расчётов.\n\nИз-за особенностей инфраструктуры МЭШ эти данные обновляются централизованно достаточно редко и нестабильно (как правило, один раз в сутки ночью). Свежие оценки, выставленные учителями в течение дня, учитываются сервером с задержкой.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showGpaInfoDialog = false },
+                    shape = PillShape
+                ) {
+                    Text("Понятно")
+                }
+            },
+            shape = ExpressiveCardShape
         )
     }
 }
@@ -1064,7 +1066,7 @@ fun SubjectMarksCard(
                                         modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        val pShortTitle = p.title.replace(" четверть", " ч.").replace(" семестр", " сем.")
+                                        val pShortTitle = ru.mesh.expressive.util.DateUtils.shortenPeriodTitle(p.title)
                                         Text(
                                             text = pShortTitle,
                                             style = MaterialTheme.typography.labelSmall,

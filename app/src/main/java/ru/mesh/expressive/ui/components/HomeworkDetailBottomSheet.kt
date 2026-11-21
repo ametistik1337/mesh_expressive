@@ -241,151 +241,34 @@ fun HomeworkDetailBottomSheet(viewModel: MeshMainViewModel) {
                     }
                 }
 
-                // Attached Files / Solution Section
-                val isUploading by viewModel.isAttachmentUploading.collectAsState()
-                val isDownloading by viewModel.isDownloadingFile.collectAsState()
-                val context = androidx.compose.ui.platform.LocalContext.current
-                val filePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                    contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
-                ) { uri ->
-                    if (uri != null && hw.homeworkEntryStudentId != null) {
-                        viewModel.uploadHomeworkAttachment(hw.homeworkEntryStudentId, uri, context)
+                // Файлы от учителя
+                val allTeacherFiles = (hw.teacherFiles + hw.attachments.map { att ->
+                    val cleanTitle = att.name.ifBlank { "Файл задания" }
+                    val ext = cleanTitle.substringAfterLast('.', "").lowercase()
+                    val cleanTypeName = when (ext) {
+                        "pdf" -> "PDF документ"
+                        "odt" -> "Документ ODT"
+                        "doc", "docx" -> "Документ Word"
+                        "ppt", "pptx" -> "Презентация PowerPoint"
+                        "xls", "xlsx" -> "Таблица Excel"
+                        "zip", "rar", "7z" -> "Архив"
+                        "png", "jpg", "jpeg" -> "Изображение"
+                        else -> "Файл задания"
                     }
-                }
+                    ru.mesh.expressive.data.model.LessonMaterialItem(
+                        title = cleanTitle,
+                        typeName = cleanTypeName,
+                        url = att.url,
+                        isFile = true
+                    )
+                }).distinctBy { it.url ?: it.title }
 
-                if (hw.homeworkEntryStudentId != null || hw.attachments.isNotEmpty()) {
+                if (allTeacherFiles.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = ExpressiveCardShape,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.AttachFile,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Решение и файлы",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                if (isUploading || isDownloading) {
-                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                } else if (hw.homeworkEntryStudentId != null) {
-                                    FilledTonalButton(
-                                        onClick = { filePickerLauncher.launch("*/*") },
-                                        shape = PillShape,
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Прикрепить", style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
-                            }
-
-                            if (hw.attachments.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(10.dp))
-                                hw.attachments.forEach { att ->
-                                    val hasUrl = att.url.isNotBlank()
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .then(
-                                                if (hasUrl) {
-                                                    Modifier.clickable {
-                                                        viewModel.downloadAttachment(context, att.url, att.name, openAfterDownload = true)
-                                                    }
-                                                } else Modifier
-                                            )
-                                            .padding(vertical = 6.dp, horizontal = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.Description,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(20.dp),
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = att.name.ifBlank { "Файл задания" },
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Medium,
-                                                    maxLines = 1,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                                if (hasUrl) {
-                                                    Text(
-                                                        text = "Нажмите для скачивания / открытия",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (hasUrl) {
-                                                IconButton(
-                                                    onClick = {
-                                                        viewModel.downloadAttachment(context, att.url, att.name, openAfterDownload = false)
-                                                    },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.Download,
-                                                        contentDescription = "Скачать файл",
-                                                        modifier = Modifier.size(20.dp),
-                                                        tint = MaterialTheme.colorScheme.primary
-                                                    )
-                                                }
-                                            }
-                                            if (att.id != null && hw.homeworkEntryStudentId != null) {
-                                                IconButton(
-                                                    onClick = {
-                                                        viewModel.deleteHomeworkAttachment(hw.homeworkEntryStudentId, att.id)
-                                                    },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.DeleteOutline,
-                                                        contentDescription = "Удалить",
-                                                        modifier = Modifier.size(20.dp),
-                                                        tint = MaterialTheme.colorScheme.error
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "Вы пока не прикрепили решение (фото тетради или файл)",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-                    }
+                    TeacherAttachmentsSection(
+                        files = allTeacherFiles,
+                        viewModel = viewModel
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
