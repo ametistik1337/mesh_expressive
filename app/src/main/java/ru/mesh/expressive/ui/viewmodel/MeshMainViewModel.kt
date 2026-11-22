@@ -105,6 +105,66 @@ class MeshMainViewModel(
     private val _studyPeriodMode = MutableStateFlow(sessionManager.studyPeriodMode)
     val studyPeriodMode: StateFlow<String> = _studyPeriodMode.asStateFlow()
 
+    data class MarksNotifyConfig(
+        val enabled: Boolean,
+        val notifyNew: Boolean,
+        val notifyChanged: Boolean,
+        val notifyPoint: Boolean,
+        val notifyPointExpiring: Boolean,
+        val notifyFinal: Boolean,
+        val notifyValues: Set<Int>,
+        val showDetails: Boolean,
+        val showGpaDelta: Boolean,
+        val quietHours: Boolean,
+        val intervalMin: Int
+    )
+
+    private fun readMarksNotifyConfig() = MarksNotifyConfig(
+        enabled = sessionManager.marksNotifyEnabled,
+        notifyNew = sessionManager.marksNotifyNew,
+        notifyChanged = sessionManager.marksNotifyChanged,
+        notifyPoint = sessionManager.marksNotifyPoint,
+        notifyPointExpiring = sessionManager.marksNotifyPointExpiring,
+        notifyFinal = sessionManager.marksNotifyFinal,
+        notifyValues = sessionManager.marksNotifyValues,
+        showDetails = sessionManager.marksNotifyShowDetails,
+        showGpaDelta = sessionManager.marksNotifyShowGpaDelta,
+        quietHours = sessionManager.marksNotifyQuietHours,
+        intervalMin = sessionManager.marksNotifyIntervalMin
+    )
+
+    private val _marksNotifyConfig = MutableStateFlow(readMarksNotifyConfig())
+    val marksNotifyConfig: StateFlow<MarksNotifyConfig> = _marksNotifyConfig.asStateFlow()
+
+    fun updateMarksNotifyConfig(
+        context: android.content.Context,
+        transform: (MarksNotifyConfig) -> MarksNotifyConfig
+    ) {
+        val next = transform(_marksNotifyConfig.value)
+        sessionManager.marksNotifyEnabled = next.enabled
+        sessionManager.marksNotifyNew = next.notifyNew
+        sessionManager.marksNotifyChanged = next.notifyChanged
+        sessionManager.marksNotifyPoint = next.notifyPoint
+        sessionManager.marksNotifyPointExpiring = next.notifyPointExpiring
+        sessionManager.marksNotifyFinal = next.notifyFinal
+        sessionManager.marksNotifyValues = next.notifyValues
+        sessionManager.marksNotifyShowDetails = next.showDetails
+        sessionManager.marksNotifyShowGpaDelta = next.showGpaDelta
+        sessionManager.marksNotifyQuietHours = next.quietHours
+        sessionManager.marksNotifyIntervalMin = next.intervalMin
+        _marksNotifyConfig.value = next
+        if (next.enabled) {
+            ru.mesh.expressive.util.MarksNotificationManager.ensureChannels(context)
+            ru.mesh.expressive.util.MarksNotificationManager.schedulePeriodicSync(context, sessionManager)
+        } else {
+            ru.mesh.expressive.util.MarksNotificationManager.cancelPeriodicSync(context)
+        }
+    }
+
+    fun sendTestMarksNotification(context: android.content.Context) {
+        ru.mesh.expressive.util.MarksNotificationManager.sendTestNotification(context, sessionManager)
+    }
+
     private val _ratingPeriodMode = MutableStateFlow(RatingPeriodMode.YEAR)
     val ratingPeriodMode: StateFlow<RatingPeriodMode> = _ratingPeriodMode.asStateFlow()
 
@@ -292,8 +352,13 @@ class MeshMainViewModel(
             val res = oauthManager.handleAuthRedirect(uri)
             _isOAuthLoading.value = false
             res.onSuccess { token ->
-                saveAuthToken(token)
-                onSuccess()
+                val safeToken = token?.takeIf { it.isNotBlank() }
+                if (safeToken != null) {
+                    saveAuthToken(safeToken)
+                    onSuccess()
+                } else {
+                    _oAuthError.value = "Сервер не вернул токен МЭШ"
+                }
             }.onFailure { err ->
                 _oAuthError.value = err.localizedMessage ?: "Ошибка авторизации"
             }
@@ -321,7 +386,12 @@ class MeshMainViewModel(
         viewModelScope.launch {
             val res = oauthManager.refreshTokens()
             res.onSuccess { newToken ->
-                onTokenRefreshSuccess(newToken)
+                val safeToken = newToken?.takeIf { it.isNotBlank() }
+                if (safeToken != null) {
+                    onTokenRefreshSuccess(safeToken)
+                } else {
+                    onTokenRefreshFailed()
+                }
             }.onFailure {
                 onTokenRefreshFailed()
             }
@@ -588,9 +658,15 @@ class MeshMainViewModel(
     }
 
     fun saveAuthToken(token: String) {
+        sessionManager.authToken = token
+        _currentTab.value = MainTab.DASHBOARD
         viewModelScope.launch {
-            repository.saveAuthToken(token)
-            _currentTab.value = MainTab.DASHBOARD
+            _isRefreshing.value = true
+            try {
+                repository.saveAuthToken(token)
+            } finally {
+                _isRefreshing.value = false
+            }
         }
     }
 

@@ -838,7 +838,7 @@ fun GiftSendScreen(
                             }
                         }
 
-                        Switch(
+                        ru.mesh.expressive.ui.components.ExpressiveSwitch(
                             checked = isAnonymous,
                             onCheckedChange = { isAnonymous = it }
                         )

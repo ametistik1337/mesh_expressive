@@ -1,5 +1,6 @@
 package ru.mesh.expressive.data.remote
 
+import android.content.Context
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -100,6 +101,55 @@ class GitHubUpdateManager {
             }
         } catch (_: Exception) {}
         return false
+    }
+
+    suspend fun downloadApk(
+        context: Context,
+        downloadUrl: String,
+        tagName: String,
+        onProgress: (Float) -> Unit
+    ): Result<java.io.File> = withContext(Dispatchers.IO) {
+        try {
+            val client = okhttp3.OkHttpClient.Builder()
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            val req = okhttp3.Request.Builder()
+                .url(downloadUrl)
+                .addHeader("User-Agent", "MeshExpressive-Android")
+                .build()
+            val resp = client.newCall(req).execute()
+            if (!resp.isSuccessful) {
+                return@withContext Result.failure(IllegalStateException("HTTP ${resp.code}"))
+            }
+            val body = resp.body ?: return@withContext Result.failure(IllegalStateException("Пустой ответ"))
+            val totalBytes = body.contentLength()
+            val safeTag = tagName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val outFile = java.io.File(context.cacheDir, "mesh_update_$safeTag.apk")
+            if (outFile.exists()) outFile.delete()
+
+            body.byteStream().use { input ->
+                outFile.outputStream().use { output: java.io.FileOutputStream ->
+                    val buf = ByteArray(16 * 1024)
+                    var downloaded = 0L
+                    var read: Int
+                    while (input.read(buf).also { read = it } != -1) {
+                        output.write(buf, 0, read)
+                        downloaded += read
+                        if (totalBytes > 0L) {
+                            onProgress((downloaded.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f))
+                        }
+                    }
+                    output.flush()
+                }
+            }
+            onProgress(1f)
+            Result.success(outFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun syncActiveCounter(

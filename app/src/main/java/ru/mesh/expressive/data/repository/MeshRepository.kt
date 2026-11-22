@@ -1090,8 +1090,14 @@ class MeshRepository(val sessionManager: SessionManager) {
                         )
                     }
                     if (summaries.isNotEmpty()) {
+                        val oldSummaries = _subjectSummaries.value
                         _subjectSummaries.value = summaries
                         sessionManager.cachedSubjectSummaries = summaries
+                        ru.mesh.expressive.MeshApplication.appContext?.let { ctx ->
+                            ru.mesh.expressive.util.MarksNotificationManager.processDiffAndNotify(
+                                ctx, sessionManager, oldSummaries, summaries
+                            )
+                        }
                     }
                 } else if (rawMarksMap.isNotEmpty()) {
                     val rawMarks = rawMarksMap.values.toList()
@@ -1134,8 +1140,14 @@ class MeshRepository(val sessionManager: SessionManager) {
                         )
                     }
                     if (summaries.isNotEmpty()) {
+                        val oldSummaries = _subjectSummaries.value
                         _subjectSummaries.value = summaries
                         sessionManager.cachedSubjectSummaries = summaries
+                        ru.mesh.expressive.MeshApplication.appContext?.let { ctx ->
+                            ru.mesh.expressive.util.MarksNotificationManager.processDiffAndNotify(
+                                ctx, sessionManager, oldSummaries, summaries
+                            )
+                        }
                     }
                 }
             }

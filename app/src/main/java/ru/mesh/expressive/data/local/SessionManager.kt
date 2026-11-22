@@ -281,6 +281,71 @@ class SessionManager(context: Context) {
         get() = getJson("cached_portfolio_achievements")
         set(value) = saveJson("cached_portfolio_achievements", value)
 
+    // --- Настройки уведомлений об оценках ---
+    var marksNotifyEnabled: Boolean
+        get() = prefs.getBoolean("marks_notify_enabled", false)
+        set(value) = prefs.edit().putBoolean("marks_notify_enabled", value).apply()
+
+    var marksNotifyNew: Boolean
+        get() = prefs.getBoolean("marks_notify_new", true)
+        set(value) = prefs.edit().putBoolean("marks_notify_new", value).apply()
+
+    var marksNotifyChanged: Boolean
+        get() = prefs.getBoolean("marks_notify_changed", true)
+        set(value) = prefs.edit().putBoolean("marks_notify_changed", value).apply()
+
+    var marksNotifyPoint: Boolean
+        get() = prefs.getBoolean("marks_notify_point", true)
+        set(value) = prefs.edit().putBoolean("marks_notify_point", value).apply()
+
+    var marksNotifyPointExpiring: Boolean
+        get() = prefs.getBoolean("marks_notify_point_expiring", true)
+        set(value) = prefs.edit().putBoolean("marks_notify_point_expiring", value).apply()
+
+    var marksNotifyFinal: Boolean
+        get() = prefs.getBoolean("marks_notify_final", true)
+        set(value) = prefs.edit().putBoolean("marks_notify_final", value).apply()
+
+    var marksNotifyValues: Set<Int>
+        get() {
+            val raw = prefs.getString("marks_notify_values", "2,3,4,5") ?: "2,3,4,5"
+            return raw.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+        }
+        set(value) {
+            prefs.edit().putString("marks_notify_values", value.sorted().joinToString(",")).apply()
+        }
+
+    var marksNotifyShowDetails: Boolean
+        get() = prefs.getBoolean("marks_notify_show_details", true)
+        set(value) = prefs.edit().putBoolean("marks_notify_show_details", value).apply()
+
+    var marksNotifyShowGpaDelta: Boolean
+        get() = prefs.getBoolean("marks_notify_show_gpa_delta", true)
+        set(value) = prefs.edit().putBoolean("marks_notify_show_gpa_delta", value).apply()
+
+    var marksNotifyQuietHours: Boolean
+        get() = prefs.getBoolean("marks_notify_quiet_hours", true)
+        set(value) = prefs.edit().putBoolean("marks_notify_quiet_hours", value).apply()
+
+    var marksNotifyIntervalMin: Int
+        get() = prefs.getInt("marks_notify_interval_min", 5)
+        set(value) = prefs.edit().putInt("marks_notify_interval_min", value).apply()
+
+    var marksNotifySeenIds: Set<String>
+        get() = prefs.getStringSet("marks_notify_seen_ids", emptySet()) ?: emptySet()
+        set(value) {
+            val trimmed = value.toList().takeLast(200).toSet()
+            prefs.edit().putStringSet("marks_notify_seen_ids", trimmed).apply()
+        }
+
+    var marksNotifyBaselineInitialized: Boolean
+        get() = prefs.getBoolean("marks_notify_baseline_init", false)
+        set(value) = prefs.edit().putBoolean("marks_notify_baseline_init", value).apply()
+
+    var marksNotifyLastExpiringDate: String?
+        get() = prefs.getString("marks_notify_last_expiring_date", null)
+        set(value) = prefs.edit().putString("marks_notify_last_expiring_date", value).apply()
+
     fun logout() {
         prefs.edit()
             .remove("auth_token")

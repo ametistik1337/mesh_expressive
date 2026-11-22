@@ -68,16 +68,24 @@ class OAuthManager(
         @SerializedName("mos_access_token") val mosAccessToken: String
     )
 
-    private data class MeshAuthResponse(
-        @SerializedName("token") val token: String,
-        @SerializedName("refreshToken") val refreshToken: String?,
-        @SerializedName("profile_id") val profileId: String?
-    )
-
-    private data class MeshRefreshResponse(
-        @SerializedName("token") val token: String?,
-        @SerializedName("refreshToken") val refreshToken: String?
-    )
+    private fun parseMeshAuthJson(json: String): Triple<String?, String?, String?> {
+        return try {
+            val root = com.google.gson.JsonParser.parseString(json).asJsonObject
+            val nested = root.getAsJsonObject("user_authentication_for_mobile_response")
+            val target = nested ?: root
+            val token = target.get("mesh_access_token")?.takeIf { !it.isJsonNull }?.asString
+                ?: target.get("token")?.takeIf { !it.isJsonNull }?.asString
+                ?: target.get("access_token")?.takeIf { !it.isJsonNull }?.asString
+            val refresh = target.get("mesh_refresh_token")?.takeIf { !it.isJsonNull }?.asString
+                ?: target.get("refreshToken")?.takeIf { !it.isJsonNull }?.asString
+                ?: target.get("refresh_token")?.takeIf { !it.isJsonNull }?.asString
+            val profileId = target.get("profile_id")?.takeIf { !it.isJsonNull }?.asString
+                ?: root.get("profile_id")?.takeIf { !it.isJsonNull }?.asString
+            Triple(token, refresh, profileId)
+        } catch (_: Exception) {
+            Triple(null, null, null)
+        }
+    }
 
     suspend fun getOrRegisterClient(): Pair<String, String> = withContext(Dispatchers.IO) {
         val existingClientId = sessionManager.oauthClientId
@@ -214,15 +222,20 @@ class OAuthManager(
             }
 
             val meshRespJson = meshResponse.body?.string() ?: ""
-            val meshAuth = gson.fromJson(meshRespJson, MeshAuthResponse::class.java)
-
-            sessionManager.authToken = meshAuth.token
-            sessionManager.meshRefreshToken = meshAuth.refreshToken
-            if (!meshAuth.profileId.isNullOrBlank()) {
-                sessionManager.profileId = meshAuth.profileId
+            val (meshToken, meshRefreshToken, meshProfileId) = parseMeshAuthJson(meshRespJson)
+            if (meshToken.isNullOrBlank()) {
+                return@withContext Result.failure(IllegalStateException("Сервер не вернул токен МЭШ: $meshRespJson"))
             }
 
-            Result.success(meshAuth.token)
+            sessionManager.authToken = meshToken
+            if (!meshRefreshToken.isNullOrBlank()) {
+                sessionManager.meshRefreshToken = meshRefreshToken
+            }
+            if (!meshProfileId.isNullOrBlank()) {
+                sessionManager.profileId = meshProfileId
+            }
+
+            Result.success(meshToken)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -245,13 +258,13 @@ class OAuthManager(
                 val response = okHttpClient.newCall(request).execute()
                 if (response.isSuccessful) {
                     val body = response.body?.string() ?: ""
-                    val parsed = gson.fromJson(body, MeshRefreshResponse::class.java)
-                    if (!parsed.token.isNullOrBlank()) {
-                        sessionManager.authToken = parsed.token
-                        if (!parsed.refreshToken.isNullOrBlank()) {
-                            sessionManager.meshRefreshToken = parsed.refreshToken
+                    val (parsedToken, parsedRefresh, _) = parseMeshAuthJson(body)
+                    if (!parsedToken.isNullOrBlank()) {
+                        sessionManager.authToken = parsedToken
+                        if (!parsedRefresh.isNullOrBlank()) {
+                            sessionManager.meshRefreshToken = parsedRefresh
                         }
-                        return@withContext Result.success(parsed.token)
+                        return@withContext Result.success(parsedToken)
                     }
                 }
             }
@@ -296,12 +309,14 @@ class OAuthManager(
                     val meshResponse = okHttpClient.newCall(meshRequest).execute()
                     if (meshResponse.isSuccessful) {
                         val meshRespJson = meshResponse.body?.string() ?: ""
-                        val meshAuth = gson.fromJson(meshRespJson, MeshAuthResponse::class.java)
-                        sessionManager.authToken = meshAuth.token
-                        if (!meshAuth.refreshToken.isNullOrBlank()) {
-                            sessionManager.meshRefreshToken = meshAuth.refreshToken
+                        val (meshToken, meshRefreshToken, _) = parseMeshAuthJson(meshRespJson)
+                        if (!meshToken.isNullOrBlank()) {
+                            sessionManager.authToken = meshToken
+                            if (!meshRefreshToken.isNullOrBlank()) {
+                                sessionManager.meshRefreshToken = meshRefreshToken
+                            }
+                            return@withContext Result.success(meshToken)
                         }
-                        return@withContext Result.success(meshAuth.token)
                     }
                 }
             }

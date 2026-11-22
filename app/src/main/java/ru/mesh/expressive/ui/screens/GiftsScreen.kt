@@ -584,7 +584,7 @@ fun GiftsScreen(viewModel: MeshMainViewModel) {
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Switch(
+                                ru.mesh.expressive.ui.components.ExpressiveSwitch(
                                     checked = gamification.infiniteStarsOverride,
                                     onCheckedChange = { viewModel.toggleInfiniteStars(it) }
                                 )

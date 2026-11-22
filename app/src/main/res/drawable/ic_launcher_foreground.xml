@@ -4,24 +4,66 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group
-        android:scaleX="0.9"
-        android:scaleY="0.9"
-        android:pivotX="54"
-        android:pivotY="54">
-        <!-- Rounded badge background -->
-        <path
-            android:fillColor="#2563EB"
-            android:pathData="M54,18 C73.88,18 90,34.12 90,54 C90,73.88 73.88,90 54,90 C34.12,90 18,73.88 18,54 C18,34.12 34.12,18 54,18 Z" />
 
-        <!-- Accent Gold Star Badge -->
-        <path
-            android:fillColor="#F59E0B"
-            android:pathData="M72,28 L74.5,33.5 L80.5,34.2 L76,38.3 L77.2,44.2 L72,41.2 L66.8,44.2 L68,38.3 L63.5,34.2 L69.5,33.5 Z" />
+    <!-- Soft drop shadow under the open textbook (no outer circle/square/blob frame) -->
+    <path
+        android:fillColor="#090D16"
+        android:fillAlpha="0.45"
+        android:pathData="M28,37
+            C37,34.5 46.5,36 54,40.5
+            C61.5,36 71,34.5 80,37
+            L80,74.5
+            C71,71.5 61.5,73 54,77
+            C46.5,73 37,71.5 28,74.5 Z" />
 
-        <!-- Stylized 'M' Letter / Diary Book Shape -->
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M34,36 L44,36 L54,52 L64,36 L74,36 L74,72 L64,72 L64,52 L56.5,64 L51.5,64 L44,52 L44,72 L34,72 Z" />
-    </group>
+    <!-- Open textbook / diary left cover edge -->
+    <path
+        android:fillColor="#2563EB"
+        android:pathData="M25,35.5
+            C35,33 45.5,34.5 54,39
+            L54,75
+            C45.5,70.8 35,69.5 25,72 Z" />
+
+    <!-- Open textbook / diary right cover edge -->
+    <path
+        android:fillColor="#1D4ED8"
+        android:pathData="M83,35.5
+            C73,33 62.5,34.5 54,39
+            L54,75
+            C62.5,70.8 73,69.5 83,72 Z" />
+
+    <!-- Left white page -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,34.5
+            C36.8,32.2 46,33.6 53,38
+            L53,70.5
+            C46,66.6 36.8,65.2 28,67.2 Z" />
+
+    <!-- Right slightly shaded page -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M80,34.5
+            C71.2,32.2 62,33.6 55,38
+            L55,70.5
+            C62,66.6 71.2,65.2 80,67.2 Z" />
+
+    <!-- Text lines on left page -->
+    <path
+        android:fillColor="#94A3B8"
+        android:pathData="M33,43 L48,44.4 L48,47 L33,45.6 Z
+            M33,50 L48,51.4 L48,54 L33,52.6 Z
+            M33,57 L44.5,58 L44.5,60.6 L33,59.6 Z" />
+
+    <!-- Text lines on right page -->
+    <path
+        android:fillColor="#94A3B8"
+        android:fillAlpha="0.65"
+        android:pathData="M60,52 L75,50.6 L75,53.2 L60,54.6 Z
+            M60,58.5 L71,57.5 L71,60.1 L60,61.1 Z" />
+
+    <!-- Prominent gold bookmark ribbon -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M63,33.4 L71,32.6 L71,56 L67,52.2 L63,56 Z" />
 </vector>

@@ -12,10 +12,15 @@ class MeshApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        appContext = applicationContext
         bindPhysicalNetwork(this)
     }
 
     companion object {
+        @Volatile
+        var appContext: Context? = null
+            private set
+
         fun bindPhysicalNetwork(context: Context) {
             try {
                 val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return

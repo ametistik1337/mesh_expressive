@@ -68,6 +68,17 @@ fun SettingsScreen(
     val hideCompletedHomework by viewModel.hideCompletedHomework.collectAsState()
     val isAutoUpdatesAndCounterEnabled by viewModel.isAutoUpdatesAndCounterEnabled.collectAsState()
     val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
+    val notifyConfig by viewModel.marksNotifyConfig.collectAsState()
+
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.updateMarksNotifyConfig(context) { it.copy(enabled = true) }
+        } else {
+            Toast.makeText(context, "Разрешение на уведомления не выдано", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     var showTokenDialog by remember { mutableStateOf(false) }
     var showResetConfirmDialog by remember { mutableStateOf(false) }
@@ -93,14 +104,44 @@ fun SettingsScreen(
         }
     }
 
-    LazyColumn(
+    val settingsTabs = remember {
+        listOf(
+            "GENERAL" to "Общее",
+            "APPEARANCE" to "Вид",
+            "STUDY" to "Учёба",
+            "NOTIFICATIONS" to "Уведомления"
+        )
+    }
+    var selectedSettingsTab by remember { mutableStateOf(settingsTabs.first()) }
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 120.dp)
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                items = settingsTabs,
+                selectedItem = selectedSettingsTab,
+                onItemSelected = { selectedSettingsTab = it },
+                label = { it.second },
+                showCheckmark = true,
+                scrollable = true
+            )
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(top = 6.dp, bottom = 120.dp)
+        ) {
+        if (selectedSettingsTab.first == "GENERAL") {
         // 1. Account & Profile Card
         item {
             Card(
@@ -323,6 +364,9 @@ fun SettingsScreen(
             }
         }
 
+        } // end GENERAL top
+
+        if (selectedSettingsTab.first == "APPEARANCE") {
         // 3. Section: Внешний вид и интерфейс
         item {
             Text(
@@ -459,6 +503,9 @@ fun SettingsScreen(
             }
         }
 
+        } // end APPEARANCE
+
+        if (selectedSettingsTab.first == "STUDY") {
         // Section: Расписание и Домашние задания
         item {
             Text(
@@ -639,6 +686,210 @@ fun SettingsScreen(
             }
         }
 
+        } // end STUDY
+
+        if (selectedSettingsTab.first == "NOTIFICATIONS") {
+        // 5.5. Section: Уведомления об оценках
+        item {
+            Text(
+                text = "Уведомления об оценках",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = ExpressiveCardShape,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SettingsToggleRow(
+                        icon = Icons.Default.NotificationsActive,
+                        title = "Уведомления об оценках",
+                        subtitle = "Фоновый мониторинг выставления, исправлений и точек",
+                        isChecked = notifyConfig.enabled,
+                        onCheckedChange = { enable ->
+                            if (enable && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                                !ru.mesh.expressive.util.MarksNotificationManager.hasNotificationPermission(context)
+                            ) {
+                                notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                viewModel.updateMarksNotifyConfig(context) { it.copy(enabled = enable) }
+                            }
+                        }
+                    )
+
+                    androidx.compose.animation.AnimatedVisibility(visible = notifyConfig.enabled) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            Text(
+                                text = "События",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            SettingsToggleRow(
+                                icon = Icons.Default.AddTask,
+                                title = "Новые оценки",
+                                subtitle = "При выставлении новой оценки в журнал",
+                                isChecked = notifyConfig.notifyNew,
+                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyNew = v) } }
+                            )
+
+                            SettingsToggleRow(
+                                icon = Icons.Default.EditNote,
+                                title = "Исправления и изменения",
+                                subtitle = "Когда оценка изменена или закрыта точка (2. → 5*)",
+                                isChecked = notifyConfig.notifyChanged,
+                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyChanged = v) } }
+                            )
+
+                            SettingsToggleRow(
+                                icon = Icons.Default.FiberManualRecord,
+                                title = "Выставление точки",
+                                subtitle = "Уведомлять о новой точке и дате её сдачи",
+                                isChecked = notifyConfig.notifyPoint,
+                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyPoint = v) } }
+                            )
+
+                            SettingsToggleRow(
+                                icon = Icons.Default.Alarm,
+                                title = "Истекающие точки",
+                                subtitle = "Напоминание за 2 дня до дедлайна сдачи",
+                                isChecked = notifyConfig.notifyPointExpiring,
+                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyPointExpiring = v) } }
+                            )
+
+                            SettingsToggleRow(
+                                icon = Icons.Default.Verified,
+                                title = "Итоговые оценки",
+                                subtitle = "При выставлении оценки за четверть или год",
+                                isChecked = notifyConfig.notifyFinal,
+                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyFinal = v) } }
+                            )
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            Text(
+                                text = "Фильтр по баллам",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(5, 4, 3, 2).forEach { markVal ->
+                                    val selected = markVal in notifyConfig.notifyValues
+                                    FilterChip(
+                                        selected = selected,
+                                        onClick = {
+                                            viewModel.updateMarksNotifyConfig(context) { cfg ->
+                                                val updated = if (selected) cfg.notifyValues - markVal else cfg.notifyValues + markVal
+                                                cfg.copy(notifyValues = updated)
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "$markVal",
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        },
+                                        shape = PillShape,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            Text(
+                                text = "Формат и расписание",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            SettingsToggleRow(
+                                icon = Icons.Default.Subject,
+                                title = "Детали работы и вес",
+                                subtitle = "Показывать форму контроля, тему и вес оценки",
+                                isChecked = notifyConfig.showDetails,
+                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(showDetails = v) } }
+                            )
+
+                            SettingsToggleRow(
+                                icon = Icons.Default.TrendingUp,
+                                title = "Сдвиг среднего балла",
+                                subtitle = "Показывать изменение балла предмета (4.33 → 4.50)",
+                                isChecked = notifyConfig.showGpaDelta,
+                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(showGpaDelta = v) } }
+                            )
+
+                            SettingsToggleRow(
+                                icon = Icons.Default.NightsStay,
+                                title = "Тихие часы (22:00 – 08:00)",
+                                subtitle = "Не присылать уведомления ночью",
+                                isChecked = notifyConfig.quietHours,
+                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(quietHours = v) } }
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Частота проверки ленты событий МЭШ",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                val intervals = remember {
+                                    listOf(1 to "1 м", 5 to "5 м", 15 to "15 м", 30 to "30 м")
+                                }
+                                val selectedInterval = intervals.find { it.first == notifyConfig.intervalMin } ?: intervals[1]
+                                ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                                    items = intervals,
+                                    selectedItem = selectedInterval,
+                                    onItemSelected = { opt ->
+                                        viewModel.updateMarksNotifyConfig(context) { it.copy(intervalMin = opt.first) }
+                                    },
+                                    label = { it.second },
+                                    showCheckmark = false,
+                                    scrollable = false
+                                )
+                            }
+
+                            FilledTonalButton(
+                                onClick = {
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                                        !ru.mesh.expressive.util.MarksNotificationManager.hasNotificationPermission(context)
+                                    ) {
+                                        notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        viewModel.sendTestMarksNotification(context)
+                                        Toast.makeText(context, "Тестовое уведомление отправлено", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                shape = PillShape,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Отправить тестовое уведомление")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        } // end NOTIFICATIONS
+
+        if (selectedSettingsTab.first == "GENERAL") {
         // 6. Section: Синхронизация и Сеть
         item {
             Text(
@@ -817,7 +1068,9 @@ fun SettingsScreen(
                 }
             }
         }
+        } // end GENERAL bottom
     }
+    } // end Column
 
     if (showClassInfoDialog) {
         AlertDialog(
@@ -1102,7 +1355,7 @@ private fun SettingsToggleRow(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        Switch(
+        ru.mesh.expressive.ui.components.ExpressiveSwitch(
             checked = isChecked,
             onCheckedChange = onCheckedChange
         )

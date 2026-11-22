@@ -450,7 +450,7 @@ fun OnboardingGuideOverlay(
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Switch(
+                                ExpressiveSwitch(
                                     checked = updatesAndCounterEnabled,
                                     onCheckedChange = {
                                         updatesAndCounterEnabled = it

@@ -758,7 +758,7 @@ fun MeshMainApp(
             ru.mesh.expressive.ui.components.UpdateAvailableDialog(
                 releaseInfo = release,
                 onDismiss = { viewModel.dismissUpdateDialog(skipThisVersion = true) },
-                onUpdate = { targetUrl ->
+                onFallbackOpenBrowser = { targetUrl ->
                     try {
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(targetUrl))
                         context.startActivity(intent)

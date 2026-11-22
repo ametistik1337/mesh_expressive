@@ -173,12 +173,31 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
 
     var showGpaInfoDialog by remember { mutableStateOf(false) }
     val activeGpa by viewModel.activeGpa.collectAsState()
-    val displayGpa = activeGpa
 
+    // Серверный средний балл за выбранный период:
+    // для конкретной четверти — среднее официальных средних баллов предметов за этот период;
+    // для "Весь год" (или если у предметов нет периодного average) — общий activeGpa с сервера МЭШ.
+    val serverPeriodGpa = remember(displaySubjectSummaries, selectedPeriod, activeGpa) {
+        if (selectedPeriod.id == "all") {
+            activeGpa
+        } else {
+            val avgs = displaySubjectSummaries.map { it.averageMark }.filter { it > 0.0 }
+            if (avgs.isNotEmpty()) avgs.average() else activeGpa
+        }
+    }
+
+    // Локальный расчёт строго по оценкам выбранного периода (четверти / всего года)
     val localGpa = remember(displaySubjectSummaries, showWeightedGpa) {
-        val subjAverages = displaySubjectSummaries
-            .map { it.getEffectiveAverage(showWeightedGpa) }
-            .filter { it > 0.0 }
+        val subjAverages = displaySubjectSummaries.mapNotNull { subj ->
+            val validMarks = subj.marks.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
+            if (validMarks.isEmpty()) null
+            else if (showWeightedGpa) {
+                val wTotal = validMarks.sumOf { it.weight }
+                if (wTotal > 0.0) validMarks.sumOf { it.effectiveValue * it.weight } / wTotal else null
+            } else {
+                validMarks.map { it.effectiveValue }.average()
+            }
+        }.filter { it > 0.0 }
         if (subjAverages.isNotEmpty()) subjAverages.average() else 0.0
     }
 
@@ -228,14 +247,15 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
+                                    val periodTag = if (selectedPeriod.id == "all") "Весь год" else selectedPeriod.title
                                     Text(
                                         text = if (localGpa > 0.0) {
-                                            "Средний балл (МЭШ) • Локальный: ${String.format(java.util.Locale.US, "%.2f", localGpa)}"
+                                            "Локальный расчёт ($periodTag): ${String.format(java.util.Locale.US, "%.2f", localGpa)}"
                                         } else {
-                                            "Средний балл (МЭШ)"
+                                            "Средний балл (МЭШ • $periodTag)"
                                         },
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.62f)
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.65f)
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Row(
@@ -243,7 +263,7 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Text(
-                                            text = if (displayGpa > 0.0) "Средний балл: ${String.format(java.util.Locale.US, "%.2f", displayGpa)}" else "Средний балл: —",
+                                            text = if (serverPeriodGpa > 0.0) "Средний балл: ${String.format(java.util.Locale.US, "%.2f", serverPeriodGpa)}" else "Средний балл: —",
                                             style = MaterialTheme.typography.headlineMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
