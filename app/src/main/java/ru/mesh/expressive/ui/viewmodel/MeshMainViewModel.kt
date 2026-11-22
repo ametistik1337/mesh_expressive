@@ -544,8 +544,40 @@ class MeshMainViewModel(
         _showOnboardingGuide.value = true
     }
 
+    private val tabHistory = ArrayDeque<MainTab>()
+    private val _canNavigateBack = MutableStateFlow(false)
+    val canNavigateBack: StateFlow<Boolean> = _canNavigateBack.asStateFlow()
+
+    private fun updateCanNavigateBack() {
+        val cur = _currentTab.value
+        _canNavigateBack.value = tabHistory.isNotEmpty() || (cur != MainTab.DASHBOARD && cur != MainTab.AUTH)
+    }
+
     fun selectTab(tab: MainTab) {
-        _currentTab.value = tab
+        val cur = _currentTab.value
+        if (tab != cur) {
+            if (cur != MainTab.AUTH && tabHistory.lastOrNull() != cur) {
+                tabHistory.addLast(cur)
+                if (tabHistory.size > 20) tabHistory.removeFirst()
+            }
+            _currentTab.value = tab
+            updateCanNavigateBack()
+        }
+    }
+
+    fun navigateBack(): Boolean {
+        if (tabHistory.isNotEmpty()) {
+            _currentTab.value = tabHistory.removeLast()
+            updateCanNavigateBack()
+            return true
+        }
+        val cur = _currentTab.value
+        if (cur != MainTab.DASHBOARD && cur != MainTab.AUTH) {
+            _currentTab.value = MainTab.DASHBOARD
+            updateCanNavigateBack()
+            return true
+        }
+        return false
     }
 
     fun selectDashboardDay(day: DashboardDay) {

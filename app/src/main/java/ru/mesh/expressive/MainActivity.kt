@@ -190,6 +190,29 @@ fun MeshMainApp(
     val availableUpdate by viewModel.availableUpdate.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
+    val canNavigateBack by viewModel.canNavigateBack.collectAsState()
+    var predictiveBackProgress by remember { mutableFloatStateOf(0f) }
+    var predictiveBackEdge by remember { mutableIntStateOf(0) }
+
+    androidx.activity.compose.PredictiveBackHandler(
+        enabled = drawerState.isOpen || isGiftSendActive || canNavigateBack
+    ) { progressFlow ->
+        try {
+            progressFlow.collect { backEvent ->
+                predictiveBackProgress = backEvent.progress
+                predictiveBackEdge = backEvent.swipeEdge
+            }
+            predictiveBackProgress = 0f
+            when {
+                drawerState.isOpen -> coroutineScope.launch { drawerState.close() }
+                isGiftSendActive -> viewModel.closeGiftSend()
+                else -> viewModel.navigateBack()
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            predictiveBackProgress = 0f
+            throw e
+        }
+    }
     val profile by viewModel.studentProfile.collectAsState()
     val activeGpa by viewModel.activeGpa.collectAsState()
     val view = LocalView.current
@@ -664,6 +687,16 @@ fun MeshMainApp(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = topPad)
+                    .graphicsLayer {
+                        if (predictiveBackProgress > 0f) {
+                            val scale = 1f - (predictiveBackProgress * 0.08f)
+                            scaleX = scale
+                            scaleY = scale
+                            val dir = if (predictiveBackEdge == 0) 1f else -1f
+                            translationX = dir * predictiveBackProgress * 42f
+                        }
+                    }
+                    .clip(RoundedCornerShape((predictiveBackProgress * 28f).dp))
             ) {
                 if (isGiftSendActive) {
                     GiftSendScreen(viewModel = viewModel)
