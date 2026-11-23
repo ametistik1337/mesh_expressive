@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
@@ -238,4 +239,17 @@ fun Modifier.expressiveBounceClick(
                 }
             } else Modifier
         )
+}
+
+@Preview(showBackground = true)
+@Composable
+fun M3WavyProgressPreview() {
+    ru.mesh.expressive.ui.theme.MeshExpressiveTheme(dynamicColor = false) {
+        M3WavyProgressIndicator(
+            progress = 0.65f,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+        )
+    }
 }

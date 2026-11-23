@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +50,49 @@ fun DashboardScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val activeGpa by viewModel.activeGpa.collectAsState()
 
+    DashboardContent(
+        profile = profile,
+        scheduleToday = scheduleToday,
+        scheduleTomorrow = scheduleTomorrow,
+        homeworkList = homeworkList,
+        meals = meals,
+        dashboardDay = dashboardDay,
+        isCompactSchedule = isCompactSchedule,
+        isRefreshing = isRefreshing,
+        activeGpa = activeGpa,
+        isLoggedIn = viewModel.isLoggedIn,
+        onRefresh = { viewModel.refreshData() },
+        onNavigate = onNavigate,
+        onSelectDashboardDay = { viewModel.selectDashboardDay(it) },
+        onOpenLessonDetails = { viewModel.openLessonDetails(it) },
+        onOpenHomeworkDetails = { viewModel.openHomeworkDetails(it) },
+        onToggleHomework = { viewModel.toggleHomework(it) },
+        vacationsCard = {
+            ru.mesh.expressive.ui.components.VacationsCard(viewModel = viewModel)
+        }
+    )
+}
+
+@Composable
+fun DashboardContent(
+    profile: StudentProfile,
+    scheduleToday: List<LessonScheduleItem>,
+    scheduleTomorrow: List<LessonScheduleItem>,
+    homeworkList: List<HomeworkItem>,
+    meals: MealsBalance,
+    dashboardDay: DashboardDay,
+    isCompactSchedule: Boolean,
+    isRefreshing: Boolean,
+    activeGpa: Double,
+    isLoggedIn: Boolean,
+    onRefresh: () -> Unit,
+    onNavigate: (MainTab) -> Unit,
+    onSelectDashboardDay: (DashboardDay) -> Unit,
+    onOpenLessonDetails: (LessonScheduleItem) -> Unit,
+    onOpenHomeworkDetails: (HomeworkItem) -> Unit,
+    onToggleHomework: (String) -> Unit,
+    vacationsCard: @Composable () -> Unit = {}
+) {
     val nextSchoolDayInfo = remember {
         val cal = java.util.Calendar.getInstance()
         val dow = cal.get(java.util.Calendar.DAY_OF_WEEK)
@@ -101,7 +145,7 @@ fun DashboardScreen(
 
     ExpressivePullToRefreshBox(
         isRefreshing = isRefreshing,
-        onRefresh = { viewModel.refreshData() },
+        onRefresh = onRefresh,
         modifier = Modifier.fillMaxSize()
     ) {
         LazyColumn(
@@ -113,7 +157,7 @@ fun DashboardScreen(
             contentPadding = PaddingValues(top = 16.dp, bottom = 120.dp)
         ) {
             // Demo Mode Banner
-            if (!viewModel.isLoggedIn) {
+            if (!isLoggedIn) {
                 item(key = "demo_banner") {
                     Card(
                         modifier = Modifier
@@ -393,7 +437,7 @@ fun DashboardScreen(
                     ExpressiveChipSegmentedToggle(
                         items = listOf(DashboardDay.TODAY, DashboardDay.TOMORROW),
                         selectedItem = dashboardDay,
-                        onItemSelected = { viewModel.selectDashboardDay(it) },
+                        onItemSelected = onSelectDashboardDay,
                         label = { when (it) { DashboardDay.TODAY -> "Сегодня"; DashboardDay.TOMORROW -> "Завтра" } }
                     )
                 }
@@ -418,7 +462,7 @@ fun DashboardScreen(
                 LessonCard(
                     lesson = lesson,
                     isCompact = isCompactSchedule,
-                    onClick = { viewModel.openLessonDetails(lesson) }
+                    onClick = { onOpenLessonDetails(lesson) }
                 )
             }
         }
@@ -460,8 +504,8 @@ fun DashboardScreen(
             ) { hw ->
                 HomeworkCard(
                     homework = hw,
-                    onClick = { viewModel.openHomeworkDetails(hw) },
-                    onToggle = { viewModel.toggleHomework(hw.id) }
+                    onClick = { onOpenHomeworkDetails(hw) },
+                    onToggle = { onToggleHomework(hw.id) }
                 )
             }
         }
@@ -469,7 +513,7 @@ fun DashboardScreen(
         // Каникулы и учебные периоды внизу экрана
         item(key = "vacations_card") {
             Spacer(modifier = Modifier.height(6.dp))
-            ru.mesh.expressive.ui.components.VacationsCard(viewModel = viewModel)
+            vacationsCard()
         }
     }
 }
@@ -508,6 +552,28 @@ fun SegmentedPill(
     }
 }
 
+private fun calculateLessonProgress(startTime: String, endTime: String): Float {
+    return try {
+        val now = java.util.Calendar.getInstance()
+        val currentMinutes = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+        val startParts = startTime.split(":")
+        val endParts = endTime.split(":")
+        if (startParts.size >= 2 && endParts.size >= 2) {
+            val startMinutes = startParts[0].trim().toInt() * 60 + startParts[1].trim().toInt()
+            val endMinutes = endParts[0].trim().toInt() * 60 + endParts[1].trim().toInt()
+            if (endMinutes > startMinutes) {
+                val fraction = (currentMinutes - startMinutes).toFloat() / (endMinutes - startMinutes).toFloat()
+                if (fraction in 0.01f..0.99f) {
+                    return fraction
+                }
+            }
+        }
+        0.55f // Fallback / превью для отображения вне интервала звонков
+    } catch (_: Exception) {
+        0.55f
+    }
+}
+
 @Composable
 fun LessonCard(
     lesson: LessonScheduleItem,
@@ -533,7 +599,42 @@ fun LessonCard(
                     MaterialTheme.colorScheme.surfaceContainerLow
             )
         ) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (lesson.isOngoing) {
+                    val progress = remember(lesson.startTime, lesson.endTime) {
+                        calculateLessonProgress(lesson.startTime, lesson.endTime)
+                    }
+                    Box(modifier = Modifier.matchParentSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(fraction = progress)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                        )
+                    }
+                    Box(
+                        modifier = Modifier.matchParentSize(),
+                        contentAlignment = Alignment.BottomStart
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(fraction = progress)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                                        shape = RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)
+                                    )
+                            )
+                        }
+                    }
+                }
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -619,6 +720,7 @@ fun LessonCard(
                 }
             }
         }
+    }
     } else {
         // Standard view: cabinet moved to time row, teacher removed completely
         Card(
@@ -634,7 +736,42 @@ fun LessonCard(
                     MaterialTheme.colorScheme.surfaceContainerLow
             )
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (lesson.isOngoing) {
+                    val progress = remember(lesson.startTime, lesson.endTime) {
+                        calculateLessonProgress(lesson.startTime, lesson.endTime)
+                    }
+                    Box(modifier = Modifier.matchParentSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(fraction = progress)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                        )
+                    }
+                    Box(
+                        modifier = Modifier.matchParentSize(),
+                        contentAlignment = Alignment.BottomStart
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.5.dp)
+                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(fraction = progress)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                                        shape = RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)
+                                    )
+                            )
+                        }
+                    }
+                }
+                Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -754,6 +891,7 @@ fun LessonCard(
         }
     }
 }
+}
 
 @Composable
 fun HomeworkCard(
@@ -851,5 +989,82 @@ fun HomeworkCard(
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true, device = "id:pixel_8")
+@Composable
+fun DashboardScreenPreview() {
+    MeshExpressiveTheme(dynamicColor = false) {
+        DashboardContent(
+            profile = StudentProfile(
+                firstName = "Александр",
+                lastName = "Смирнов",
+                className = "10 \"А\"",
+                schoolName = "Школа № 1502",
+                gpa = 4.82
+            ),
+            scheduleToday = listOf(
+                LessonScheduleItem(
+                    id = "1",
+                    subject = "Алгебра и начала анализа",
+                    room = "304",
+                    startTime = "08:30",
+                    endTime = "09:15",
+                    teacherName = "Иванова Е. В.",
+                    isOngoing = false
+                ),
+                LessonScheduleItem(
+                    id = "2",
+                    subject = "Информатика",
+                    room = "214",
+                    startTime = "09:30",
+                    endTime = "10:15",
+                    teacherName = "Петров С. А.",
+                    isOngoing = true
+                ),
+                LessonScheduleItem(
+                    id = "3",
+                    subject = "Физика",
+                    room = "108",
+                    startTime = "10:30",
+                    endTime = "11:15",
+                    teacherName = "Сидорова М. Н.",
+                    isOngoing = false
+                )
+            ),
+            scheduleTomorrow = emptyList(),
+            homeworkList = listOf(
+                HomeworkItem(
+                    id = "101",
+                    subject = "Алгебра",
+                    description = "Параграф 14, № 14.1 - 14.8 решить в тетради",
+                    dueDate = "Завтра",
+                    isDone = false
+                ),
+                HomeworkItem(
+                    id = "102",
+                    subject = "Физика",
+                    description = "Подготовиться к лабораторной работе №3",
+                    dueDate = "Завтра",
+                    isDone = false
+                )
+            ),
+            meals = MealsBalance(
+                clientBalanceRub = 450.50
+            ),
+            dashboardDay = DashboardDay.TODAY,
+            isCompactSchedule = false,
+            isRefreshing = false,
+            activeGpa = 4.82,
+            isLoggedIn = true,
+            onRefresh = {},
+            onNavigate = {},
+            onSelectDashboardDay = {},
+            onOpenLessonDetails = {},
+            onOpenHomeworkDetails = {},
+            onToggleHomework = {},
+            vacationsCard = {}
+        )
     }
 }
