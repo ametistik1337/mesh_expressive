@@ -548,9 +548,14 @@ class MeshMainViewModel(
     private val _canNavigateBack = MutableStateFlow(false)
     val canNavigateBack: StateFlow<Boolean> = _canNavigateBack.asStateFlow()
 
+    private val _previousTab = MutableStateFlow<MainTab?>(null)
+    val previousTab: StateFlow<MainTab?> = _previousTab.asStateFlow()
+
     private fun updateCanNavigateBack() {
         val cur = _currentTab.value
-        _canNavigateBack.value = tabHistory.isNotEmpty() || (cur != MainTab.DASHBOARD && cur != MainTab.AUTH)
+        val prev = tabHistory.lastOrNull() ?: if (cur != MainTab.DASHBOARD && cur != MainTab.AUTH) MainTab.DASHBOARD else null
+        _previousTab.value = prev
+        _canNavigateBack.value = prev != null
     }
 
     fun selectTab(tab: MainTab) {
@@ -773,6 +778,39 @@ class MeshMainViewModel(
         _isGiftSendActive.value = false
         _selectedGiftForSend.value = null
         _targetRecipientGamifId.value = null
+    }
+
+    private val _roundingLimits = MutableStateFlow(repository.getCachedRoundingLimits())
+    val roundingLimits: StateFlow<RoundingLimits> = _roundingLimits.asStateFlow()
+
+    private val _calculatorSubject = MutableStateFlow<SubjectSummary?>(null)
+    val calculatorSubject: StateFlow<SubjectSummary?> = _calculatorSubject.asStateFlow()
+
+    fun openMarkCalculator(subject: SubjectSummary) {
+        _calculatorSubject.value = subject
+        viewModelScope.launch {
+            _roundingLimits.value = repository.fetchRoundingLimits()
+        }
+    }
+
+    fun closeMarkCalculator() {
+        _calculatorSubject.value = null
+    }
+
+    fun updateManualRoundingLimits(three: Double, four: Double, five: Double) {
+        sessionManager.manualRoundingLimit3 = three.toFloat()
+        sessionManager.manualRoundingLimit4 = four.toFloat()
+        sessionManager.manualRoundingLimit5 = five.toFloat()
+        sessionManager.isManualRoundingOverride = true
+        _roundingLimits.value = repository.getCachedRoundingLimits()
+    }
+
+    fun resetRoundingLimitsToServer() {
+        sessionManager.isManualRoundingOverride = false
+        _roundingLimits.value = repository.getCachedRoundingLimits()
+        viewModelScope.launch {
+            _roundingLimits.value = repository.fetchRoundingLimits()
+        }
     }
 
     private val _selectedLessonForDetails = MutableStateFlow<LessonScheduleItem?>(null)

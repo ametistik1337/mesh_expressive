@@ -298,6 +298,15 @@ interface MeshEmiasApi {
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 50
     ): Response<List<EmiasMedicalRecommendationDTO>>
+
+    @GET("api/ej/core/family/v1/school_settings/rounding_limits")
+    suspend fun getRoundingLimits(
+        @Header("Authorization") token: String,
+        @Header("X-Mes-Subsystem") subsystem: String = "familymp",
+        @Header("client-type") clientType: String = "diary-mobile",
+        @Header("Profile-Id") profileId: Long = 0L,
+        @Query("student_id") studentId: Long? = null
+    ): Response<RoundingLimitsDTO>
 }
 
 data class VisitListResponseDTO(

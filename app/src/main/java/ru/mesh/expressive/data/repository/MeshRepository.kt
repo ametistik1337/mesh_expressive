@@ -3246,4 +3246,53 @@ class MeshRepository(val sessionManager: SessionManager) {
             Result.failure(e)
         }
     }
+
+    suspend fun fetchRoundingLimits(): RoundingLimits = withContext(Dispatchers.IO) {
+        val rawToken = sessionManager.authToken
+        val profileId = sessionManager.profileId.toLongOrNull() ?: 0L
+        if (!rawToken.isNullOrBlank() && profileId > 0L) {
+            try {
+                val bearer = if (rawToken.startsWith("Bearer ")) rawToken else "Bearer $rawToken"
+                val studentId = _studentProfile.value.id.toLongOrNull()?.takeIf { it > 0L } ?: profileId
+                val resp = MeshNetworkClient.emiasApi.getRoundingLimits(
+                    token = bearer,
+                    profileId = profileId,
+                    studentId = studentId
+                )
+                if (resp.isSuccessful && resp.body() != null) {
+                    val dto = resp.body()!!
+                    val t3 = dto.for3?.takeIf { it in 2.0..3.4 }
+                    val t4 = dto.for4?.takeIf { it in 3.0..4.4 }
+                    val t5 = dto.for5?.takeIf { it in 4.0..5.0 }
+                    if (t3 != null && t4 != null && t5 != null) {
+                        sessionManager.serverRoundingLimit3 = t3.toFloat()
+                        sessionManager.serverRoundingLimit4 = t4.toFloat()
+                        sessionManager.serverRoundingLimit5 = t5.toFloat()
+                        sessionManager.hasServerRoundingLimits = true
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        getCachedRoundingLimits()
+    }
+
+    fun getCachedRoundingLimits(): RoundingLimits {
+        return if (sessionManager.isManualRoundingOverride) {
+            RoundingLimits(
+                three = sessionManager.manualRoundingLimit3.toDouble(),
+                four = sessionManager.manualRoundingLimit4.toDouble(),
+                five = sessionManager.manualRoundingLimit5.toDouble(),
+                isFromServer = sessionManager.hasServerRoundingLimits,
+                isManualOverride = true
+            )
+        } else {
+            RoundingLimits(
+                three = sessionManager.serverRoundingLimit3.toDouble(),
+                four = sessionManager.serverRoundingLimit4.toDouble(),
+                five = sessionManager.serverRoundingLimit5.toDouble(),
+                isFromServer = sessionManager.hasServerRoundingLimits,
+                isManualOverride = false
+            )
+        }
+    }
 }

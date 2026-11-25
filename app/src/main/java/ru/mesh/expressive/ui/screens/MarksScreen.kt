@@ -49,8 +49,6 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val viewMode by viewModel.marksViewMode.collectAsState()
     val showWeightedGpa by viewModel.showWeightedGpa.collectAsState()
-    var showCalculatorDialog by remember { mutableStateOf(false) }
-    var selectedSubjectForCalc by remember { mutableStateOf<SubjectSummary?>(null) }
 
     val periodsSchedules by viewModel.periodsSchedules.collectAsState()
     val studyPeriodMode by viewModel.studyPeriodMode.collectAsState()
@@ -356,8 +354,7 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                             subjectSummary = subject,
                             showWeightedGpa = showWeightedGpa,
                             onOpenCalculator = {
-                                selectedSubjectForCalc = subject
-                                showCalculatorDialog = true
+                                viewModel.openMarkCalculator(subject)
                             },
                             onMarkClick = { viewModel.openMarkDetails(it) }
                         )
@@ -395,117 +392,6 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                 }
             }
         }
-    }
-
-    if (showCalculatorDialog && selectedSubjectForCalc != null) {
-        val subject = selectedSubjectForCalc!!
-        var targetGpa by remember { mutableFloatStateOf(4.60f) }
-        val neededFives = calculateNeededFives(subject, targetGpa)
-
-        AlertDialog(
-            onDismissRequest = { showCalculatorDialog = false },
-            icon = { Icon(Icons.Default.Calculate, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp)) },
-            title = { Text("Калькулятор оценок", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(text = "Предмет: ${subject.subject}", fontWeight = FontWeight.SemiBold)
-                    Text(text = "Текущий средний балл: ${if (subject.averageMark > 0.0) String.format(java.util.Locale.US, "%.2f", subject.averageMark) else "—"}")
-
-                    // Target presets
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = PillShape,
-                            color = if (targetGpa == 3.60f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { targetGpa = 3.60f }
-                        ) {
-                            Text(
-                                text = "На «4» (3.60)",
-                                modifier = Modifier.padding(vertical = 8.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (targetGpa == 3.60f) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        Surface(
-                            shape = PillShape,
-                            color = if (targetGpa == 4.60f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { targetGpa = 4.60f }
-                        ) {
-                            Text(
-                                text = "На «5» (4.60)",
-                                modifier = Modifier.padding(vertical = 8.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (targetGpa == 4.60f) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "Целевой балл:", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = String.format(java.util.Locale.US, "%.2f", targetGpa),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    Slider(
-                        value = targetGpa,
-                        onValueChange = { targetGpa = (it * 20).toInt() / 20f },
-                        valueRange = 3.50f..4.80f
-                    )
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = if (subject.averageMark >= targetGpa)
-                                    "Цель уже достигнута!"
-                                else
-                                    "Нужно получить пятёрок (с весом 1.0): $neededFives шт.",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "В МЭШ средний балл от 4.60 округляется в итоговую «5» за период",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showCalculatorDialog = false },
-                    shape = PillShape
-                ) {
-                    Text("Понятно")
-                }
-            }
-        )
     }
 
     if (showGpaInfoDialog) {
@@ -1280,25 +1166,4 @@ fun SubjectMarksCard(
             }
         }
     }
-}
-
-private fun calculateNeededFives(subject: SubjectSummary, targetGpa: Float): Int {
-    val currentAvg = subject.getEffectiveAverage(true)
-    if (currentAvg >= targetGpa) return 0
-
-    val validMarks = subject.marks.filter { (!it.isPoint || it.isPointExpired) && it.effectiveValue in 2..5 }
-    val (weightedSum, totalWeight) = if (validMarks.isNotEmpty()) {
-        val sum = validMarks.sumOf { it.effectiveValue * it.weight }
-        val weight = validMarks.sumOf { it.weight }
-        sum to weight
-    } else {
-        (subject.averageMark * 1.0) to 1.0
-    }
-
-    val effectiveTarget = targetGpa.coerceAtMost(4.85f).toDouble()
-    val denominator = 5.0 - effectiveTarget
-    if (denominator <= 0.001) return 0
-
-    val needed = ceil((effectiveTarget * totalWeight - weightedSum) / denominator).toInt()
-    return needed.coerceIn(0, 99)
 }

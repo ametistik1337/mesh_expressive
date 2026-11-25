@@ -1083,3 +1083,37 @@ data class PortfolioAchievementItem(
     val date: String = "",
     val organization: String = ""
 )
+
+data class RoundingLimitsDTO(
+    @SerializedName("rounding_limits_for_estimates_for_2") val for2: Double? = null,
+    @SerializedName("rounding_limits_for_estimates_for_3") val for3: Double? = null,
+    @SerializedName("rounding_limits_for_estimates_for_4") val for4: Double? = null,
+    @SerializedName("rounding_limits_for_estimates_for_5") val for5: Double? = null,
+    @SerializedName("rounding_limits_for_estimates_for_approve") val forApprove: Double? = null
+)
+
+data class RoundingLimits(
+    val two: Double = 0.0,
+    val three: Double = 2.60,
+    val four: Double = 3.60,
+    val five: Double = 4.60,
+    val isFromServer: Boolean = false,
+    val isManualOverride: Boolean = false
+) {
+    fun resolveFinalMark(average: Double): Int {
+        if (average <= 0.0) return 0
+        return when {
+            average >= five -> 5
+            average >= four -> 4
+            average >= three -> 3
+            else -> 2
+        }
+    }
+
+    fun thresholdFor(mark: Int): Double = when (mark) {
+        5 -> five
+        4 -> four
+        3 -> three
+        else -> two
+    }
+}

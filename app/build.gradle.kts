@@ -11,8 +11,8 @@ android {
         applicationId = "ru.mesh.expressive"
         minSdk = 26
         targetSdk = 34
-        versionCode = 17
-        versionName = "2.3.1"
+        versionCode = 18
+        versionName = "2.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -87,4 +87,5 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("junit:junit:4.13.2")
 }

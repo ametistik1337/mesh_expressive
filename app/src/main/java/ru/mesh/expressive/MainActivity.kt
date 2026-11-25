@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -182,6 +184,9 @@ fun MeshMainApp(
 ) {
     val currentTab by viewModel.currentTab.collectAsState()
     val isGiftSendActive by viewModel.isGiftSendActive.collectAsState()
+    val calculatorSubject by viewModel.calculatorSubject.collectAsState()
+    val isCalculatorActive = calculatorSubject != null
+    val hasModalScreen = isCalculatorActive || isGiftSendActive
     val showOnboardingGuide by viewModel.showOnboardingGuide.collectAsState()
     val isTokenRefreshing by viewModel.isTokenRefreshing.collectAsState()
     val isTokenRefreshOverlayDismissed by viewModel.isTokenRefreshOverlayDismissed.collectAsState()
@@ -191,32 +196,16 @@ fun MeshMainApp(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     val canNavigateBack by viewModel.canNavigateBack.collectAsState()
-    var predictiveBackProgress by remember { mutableFloatStateOf(0f) }
+    val previousTab by viewModel.previousTab.collectAsState()
+    val predictiveBackAnim = remember { Animatable(0f) }
+    val commitBackAnim = remember { Animatable(0f) }
+    val predictiveBackProgress = predictiveBackAnim.value
+    val commitBackProgress = commitBackAnim.value
     var predictiveBackEdge by remember { mutableIntStateOf(0) }
-
-    androidx.activity.compose.PredictiveBackHandler(
-        enabled = drawerState.isOpen || isGiftSendActive || canNavigateBack
-    ) { progressFlow ->
-        try {
-            progressFlow.collect { backEvent ->
-                predictiveBackProgress = backEvent.progress
-                predictiveBackEdge = backEvent.swipeEdge
-            }
-            predictiveBackProgress = 0f
-            when {
-                drawerState.isOpen -> coroutineScope.launch { drawerState.close() }
-                isGiftSendActive -> viewModel.closeGiftSend()
-                else -> viewModel.navigateBack()
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            predictiveBackProgress = 0f
-            throw e
-        }
-    }
-    val profile by viewModel.studentProfile.collectAsState()
-    val activeGpa by viewModel.activeGpa.collectAsState()
-    val view = LocalView.current
-    val context = LocalContext.current
+    var predictiveBackDyPx by remember { mutableFloatStateOf(0f) }
+    var isBackCompleting by remember { mutableStateOf(false) }
+    var frozenPrevTab by remember { mutableStateOf<MainTab?>(null) }
+    val density = LocalDensity.current
 
     // Dock tabs that support horizontal swipe gestures
     val dockTabs = remember {
@@ -238,6 +227,77 @@ fun MeshMainApp(
         initialPage = initialDockIndex,
         pageCount = { dockTabs.size }
     )
+
+    androidx.activity.compose.PredictiveBackHandler(
+        enabled = drawerState.isOpen || isGiftSendActive || isCalculatorActive || canNavigateBack
+    ) { progressFlow ->
+        var startTouchY: Float? = null
+        isBackCompleting = false
+        commitBackAnim.snapTo(0f)
+        try {
+            progressFlow.collect { backEvent ->
+                if (startTouchY == null) startTouchY = backEvent.touchY
+                predictiveBackAnim.snapTo(backEvent.progress)
+                predictiveBackEdge = backEvent.swipeEdge
+                predictiveBackDyPx = backEvent.touchY - (startTouchY ?: backEvent.touchY)
+            }
+            if (drawerState.isOpen) {
+                isBackCompleting = false
+                predictiveBackAnim.snapTo(0f)
+                commitBackAnim.snapTo(0f)
+                predictiveBackDyPx = 0f
+                coroutineScope.launch { drawerState.close() }
+            } else {
+                isBackCompleting = true
+                frozenPrevTab = previousTab
+                commitBackAnim.snapTo(0f)
+                commitBackAnim.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = ru.mesh.expressive.ui.components.PredictiveBackPhysics.SPRING_DAMPING,
+                        stiffness = ru.mesh.expressive.ui.components.PredictiveBackPhysics.SPRING_STIFFNESS
+                    )
+                )
+                val destTab = frozenPrevTab ?: previousTab
+                when {
+                    isCalculatorActive -> viewModel.closeMarkCalculator()
+                    isGiftSendActive -> viewModel.closeGiftSend()
+                    else -> {
+                        viewModel.navigateBack()
+                        val destIdx = destTab?.let { dockTabs.indexOf(it) } ?: -1
+                        if (destIdx >= 0 && pagerState.currentPage != destIdx) {
+                            pagerState.scrollToPage(destIdx)
+                        }
+                    }
+                }
+                repeat(2) { androidx.compose.runtime.withFrameNanos { } }
+                isBackCompleting = false
+                frozenPrevTab = null
+                predictiveBackAnim.snapTo(0f)
+                commitBackAnim.snapTo(0f)
+                predictiveBackDyPx = 0f
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            isBackCompleting = false
+            frozenPrevTab = null
+            coroutineScope.launch {
+                commitBackAnim.snapTo(0f)
+                predictiveBackAnim.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = ru.mesh.expressive.ui.components.PredictiveBackPhysics.SPRING_DAMPING,
+                        stiffness = ru.mesh.expressive.ui.components.PredictiveBackPhysics.SPRING_STIFFNESS
+                    )
+                )
+                predictiveBackDyPx = 0f
+            }
+            throw e
+        }
+    }
+    val profile by viewModel.studentProfile.collectAsState()
+    val activeGpa by viewModel.activeGpa.collectAsState()
+    val view = LocalView.current
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         val savedTabStr = viewModel.sessionManager.startTab
@@ -316,12 +376,140 @@ fun MeshMainApp(
     var menuTargetRect by remember { mutableStateOf<Rect?>(null) }
     var profileTargetRect by remember { mutableStateOf<Rect?>(null) }
     var dockTargetRect by remember { mutableStateOf<Rect?>(null) }
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
     ) {
+        val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+        val heightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
+        val g = ru.mesh.expressive.ui.components.PredictiveBackPhysics.interpolateGesture(predictiveBackProgress)
+        // Начало жеста: от края пальца (слева -> вправо +1f, справа -> влево -1f).
+        // После отпускания (commit): уходит обратно за край, от которого свайпали (справа -> +widthPx, слева -> -widthPx).
+        val gestureDir = if (predictiveBackEdge == 0) 1f else -1f
+        val commitDir = -gestureDir
 
+        val dp8 = with(density) { 8.dp.toPx() }
+        val dp56 = with(density) { 56.dp.toPx() }
+
+        val gestureSlideX = gestureDir * dp56 * g
+        val finalClosingOffsetX = if (isBackCompleting) {
+            ru.mesh.expressive.ui.components.PredictiveBackPhysics.lerp(gestureSlideX, commitDir * widthPx, commitBackProgress)
+        } else {
+            gestureSlideX
+        }
+        val slideFraction = (kotlin.math.abs(finalClosingOffsetX) / widthPx).coerceIn(0f, 1f)
+
+        val finalClosingScale = if (isBackCompleting) {
+            ru.mesh.expressive.ui.components.PredictiveBackPhysics.lerp(
+                ru.mesh.expressive.ui.components.PredictiveBackPhysics.lerp(1f, 0.90f, g),
+                0.85f,
+                commitBackProgress
+            )
+        } else {
+            ru.mesh.expressive.ui.components.PredictiveBackPhysics.lerp(1f, 0.90f, g)
+        }
+        val finalClosingOffsetY = ru.mesh.expressive.ui.components.PredictiveBackPhysics.computeYOffsetPx(
+            containerHeightPx = heightPx,
+            currentRectHeightPx = heightPx * finalClosingScale,
+            dyPx = predictiveBackDyPx,
+            dp8Px = dp8
+        )
+        val finalCornerDp = (32f * (g + commitBackProgress * (1f - g))).dp
+
+        // Параллакс заднего экрана с противоположной от commitDir стороны (-commitDir * 0.35f -> 0f)
+        val activeDir = if (isBackCompleting) commitDir else gestureDir
+        val finalEnteringOffsetX = -activeDir * (widthPx - kotlin.math.abs(finalClosingOffsetX)) *
+            ru.mesh.expressive.ui.components.PredictiveBackPhysics.BACK_PARALLAX_FACTOR
+
+        val activePrevTab = if (isBackCompleting) (frozenPrevTab ?: previousTab) else previousTab
+        if (!hasModalScreen && (predictiveBackProgress > 0f || isBackCompleting) && !drawerState.isOpen && activePrevTab != null) {
+            val prevTab = activePrevTab
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationX = finalEnteringOffsetX
+                    }
+            ) {
+                Scaffold(
+                    topBar = {
+                        if (prevTab != MainTab.AUTH) {
+                            Surface(
+                                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                shadowElevation = 3.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                CenterAlignedTopAppBar(
+                                    title = {
+                                        Text(
+                                            text = tabTitle(prevTab),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    },
+                                    navigationIcon = {
+                                        IconButton(onClick = {}) {
+                                            Icon(Icons.Default.Menu, contentDescription = null)
+                                        }
+                                    },
+                                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                        containerColor = Color.Transparent
+                                    )
+                                )
+                            }
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.surface
+                ) { prevPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = if (prevTab == MainTab.AUTH) 0.dp else prevPadding.calculateTopPadding())
+                    ) {
+                        TabScreenContent(
+                            tab = prevTab,
+                            viewModel = viewModel,
+                            isMonetEnabled = isMonetEnabled,
+                            onToggleMonet = onToggleMonet
+                        )
+                    }
+                }
+                val scrimAlpha = (0.28f * (1f - slideFraction)).coerceIn(0f, 0.28f)
+                if (scrimAlpha > 0.005f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = scrimAlpha))
+                    )
+                }
+            }
+        }
+
+        val baseLayerModifier = if (hasModalScreen) {
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = finalEnteringOffsetX
+                }
+        } else if ((predictiveBackProgress > 0f || isBackCompleting) && !drawerState.isOpen) {
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = finalClosingScale
+                    scaleY = finalClosingScale
+                    translationX = finalClosingOffsetX
+                    translationY = finalClosingOffsetY
+                    shadowElevation = with(density) { 16.dp.toPx() } * (1f - slideFraction * 0.5f)
+                    shape = RoundedCornerShape(finalCornerDp)
+                    clip = true
+                }
+        } else {
+            Modifier.fillMaxSize()
+        }
+
+        Box(modifier = baseLayerModifier) {
         ModalNavigationDrawer(
             drawerState = drawerState,
             gesturesEnabled = !isScrubbing,
@@ -572,7 +760,7 @@ fun MeshMainApp(
         ) {
         Scaffold(
             topBar = {
-                if (currentTab != MainTab.AUTH && !isGiftSendActive) {
+                if (currentTab != MainTab.AUTH) {
                     Surface(
                         shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
                         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -682,27 +870,16 @@ fun MeshMainApp(
             },
             containerColor = MaterialTheme.colorScheme.surface
         ) { paddingValues ->
-            val topPad = if (currentTab == MainTab.AUTH || isGiftSendActive) 0.dp else paddingValues.calculateTopPadding()
+            val topPad = if (currentTab == MainTab.AUTH) 0.dp else paddingValues.calculateTopPadding()
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = topPad)
-                    .graphicsLayer {
-                        if (predictiveBackProgress > 0f) {
-                            val scale = 1f - (predictiveBackProgress * 0.08f)
-                            scaleX = scale
-                            scaleY = scale
-                            val dir = if (predictiveBackEdge == 0) 1f else -1f
-                            translationX = dir * predictiveBackProgress * 42f
-                        }
-                    }
-                    .clip(RoundedCornerShape((predictiveBackProgress * 28f).dp))
             ) {
-                if (isGiftSendActive) {
-                    GiftSendScreen(viewModel = viewModel)
-                } else if (currentTab in dockTabs) {
+                if (currentTab in dockTabs) {
                     HorizontalPager(
                         state = pagerState,
+                        beyondBoundsPageCount = 3,
                         modifier = Modifier.fillMaxSize()
                     ) { page ->
                         when (dockTabs[page]) {
@@ -747,7 +924,7 @@ fun MeshMainApp(
                     }
                 }
 
-                if (currentTab != MainTab.AUTH && !isGiftSendActive) {
+                if (currentTab != MainTab.AUTH) {
                     val isHaptic = ru.mesh.expressive.ui.components.LocalHapticFeedbackEnabled.current
                     val haptic = LocalHapticFeedback.current
                     ExpressiveFloatingDock(
@@ -769,6 +946,78 @@ fun MeshMainApp(
                 }
             }
         }
+        }
+
+        if (hasModalScreen) {
+            val modalScrimAlpha = (0.28f * (1f - slideFraction)).coerceIn(0f, 0.28f)
+            if (modalScrimAlpha > 0.005f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = modalScrimAlpha))
+                )
+            }
+        }
+        }
+
+        val modalPredictiveModifier = if ((predictiveBackProgress > 0f || isBackCompleting) && hasModalScreen) {
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = finalClosingScale
+                    scaleY = finalClosingScale
+                    translationX = finalClosingOffsetX
+                    translationY = finalClosingOffsetY
+                    shadowElevation = with(density) { 18.dp.toPx() } * (1f - slideFraction * 0.5f)
+                    shape = RoundedCornerShape(finalCornerDp)
+                    clip = true
+                }
+        } else {
+            Modifier.fillMaxSize()
+        }
+
+        AnimatedVisibility(
+            visible = isCalculatorActive && calculatorSubject != null,
+            enter = slideInHorizontally(
+                animationSpec = spring(dampingRatio = 0.86f, stiffness = 420f)
+            ) { it / 4 } + fadeIn(animationSpec = spring(stiffness = 460f)),
+            exit = if (isBackCompleting) {
+                ExitTransition.None
+            } else {
+                fadeOut(animationSpec = spring(stiffness = 500f)) + scaleOut(
+                    targetScale = 0.94f,
+                    animationSpec = spring(stiffness = 500f)
+                )
+            }
+        ) {
+            calculatorSubject?.let { subj ->
+                Box(modifier = modalPredictiveModifier) {
+                    MarkCalculatorScreen(
+                        subject = subj,
+                        viewModel = viewModel,
+                        onBack = { viewModel.closeMarkCalculator() }
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = !isCalculatorActive && isGiftSendActive,
+            enter = slideInHorizontally(
+                animationSpec = spring(dampingRatio = 0.86f, stiffness = 420f)
+            ) { it / 4 } + fadeIn(animationSpec = spring(stiffness = 460f)),
+            exit = if (isBackCompleting) {
+                ExitTransition.None
+            } else {
+                fadeOut(animationSpec = spring(stiffness = 500f)) + scaleOut(
+                    targetScale = 0.94f,
+                    animationSpec = spring(stiffness = 500f)
+                )
+            }
+        ) {
+            Box(modifier = modalPredictiveModifier) {
+                GiftSendScreen(viewModel = viewModel)
+            }
         }
 
         ru.mesh.expressive.ui.components.LessonDetailBottomSheet(viewModel = viewModel)
@@ -816,6 +1065,55 @@ fun MeshMainApp(
                 }
             )
         }
+    }
+}
+
+private fun tabTitle(tab: MainTab): String = when (tab) {
+    MainTab.DASHBOARD -> "Дневник МЭШ"
+    MainTab.SCHEDULE -> "Расписание"
+    MainTab.HOMEWORK -> "Задания"
+    MainTab.MARKS -> "Оценки"
+    MainTab.PORTFOLIO -> "Портфолио и Олимпиады"
+    MainTab.GIFTS -> "Звезды и подарки"
+    MainTab.CLASSMATES -> "Мой класс"
+    MainTab.RATING -> "Рейтинг класса"
+    MainTab.ATTENDANCE -> "Посещаемость и справки"
+    MainTab.MEALS -> "Москвёнок и буфет"
+    MainTab.SETTINGS -> "Настройки"
+    MainTab.AUTH -> "Авторизация"
+}
+
+@Composable
+private fun TabScreenContent(
+    tab: MainTab,
+    viewModel: MeshMainViewModel,
+    isMonetEnabled: Boolean,
+    onToggleMonet: (Boolean) -> Unit
+) {
+    when (tab) {
+        MainTab.DASHBOARD -> DashboardScreen(
+            viewModel = viewModel,
+            onNavigate = { viewModel.selectTab(it) }
+        )
+        MainTab.SCHEDULE -> ScheduleScreen(viewModel = viewModel)
+        MainTab.HOMEWORK -> HomeworkScreen(viewModel = viewModel)
+        MainTab.MARKS -> MarksScreen(viewModel = viewModel)
+        MainTab.PORTFOLIO -> PortfolioScreen(viewModel = viewModel)
+        MainTab.GIFTS -> GiftsScreen(viewModel = viewModel)
+        MainTab.CLASSMATES -> ClassmatesScreen(viewModel = viewModel)
+        MainTab.RATING -> RatingScreen(viewModel = viewModel)
+        MainTab.ATTENDANCE -> AttendanceScreen(viewModel = viewModel)
+        MainTab.MEALS -> MealsScreen(viewModel = viewModel)
+        MainTab.AUTH -> AuthScreen(
+            viewModel = viewModel,
+            onAuthSuccess = { viewModel.selectTab(MainTab.DASHBOARD) }
+        )
+        MainTab.SETTINGS -> SettingsScreen(
+            viewModel = viewModel,
+            isMonetEnabled = isMonetEnabled,
+            onToggleMonet = onToggleMonet,
+            onNavigateToAuth = { viewModel.selectTab(MainTab.AUTH) }
+        )
     }
 }
 

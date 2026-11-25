@@ -103,6 +103,38 @@ class SessionManager(context: Context) {
         get() = prefs.getFloat("gpa_target_score", 4.60f)
         set(value) = prefs.edit().putFloat("gpa_target_score", value).apply()
 
+    var serverRoundingLimit3: Float
+        get() = prefs.getFloat("server_rounding_limit_3", 2.60f)
+        set(value) = prefs.edit().putFloat("server_rounding_limit_3", value).apply()
+
+    var serverRoundingLimit4: Float
+        get() = prefs.getFloat("server_rounding_limit_4", 3.60f)
+        set(value) = prefs.edit().putFloat("server_rounding_limit_4", value).apply()
+
+    var serverRoundingLimit5: Float
+        get() = prefs.getFloat("server_rounding_limit_5", 4.60f)
+        set(value) = prefs.edit().putFloat("server_rounding_limit_5", value).apply()
+
+    var hasServerRoundingLimits: Boolean
+        get() = prefs.getBoolean("has_server_rounding_limits", false)
+        set(value) = prefs.edit().putBoolean("has_server_rounding_limits", value).apply()
+
+    var isManualRoundingOverride: Boolean
+        get() = prefs.getBoolean("is_manual_rounding_override", false)
+        set(value) = prefs.edit().putBoolean("is_manual_rounding_override", value).apply()
+
+    var manualRoundingLimit3: Float
+        get() = prefs.getFloat("manual_rounding_limit_3", 2.60f)
+        set(value) = prefs.edit().putFloat("manual_rounding_limit_3", value).apply()
+
+    var manualRoundingLimit4: Float
+        get() = prefs.getFloat("manual_rounding_limit_4", 3.60f)
+        set(value) = prefs.edit().putFloat("manual_rounding_limit_4", value).apply()
+
+    var manualRoundingLimit5: Float
+        get() = prefs.getFloat("manual_rounding_limit_5", 4.60f)
+        set(value) = prefs.edit().putFloat("manual_rounding_limit_5", value).apply()
+
     var autoRefreshIntervalMinutes: Int
         get() = prefs.getInt("auto_refresh_interval_minutes", 15)
         set(value) = prefs.edit().putInt("auto_refresh_interval_minutes", value).apply()
