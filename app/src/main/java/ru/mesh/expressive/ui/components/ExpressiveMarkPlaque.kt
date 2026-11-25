@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -250,6 +251,108 @@ fun ExpressiveMarkPlaque(
                     )
                 }
             }
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Оценка с точкой (Светлая тема)")
+@Composable
+fun ExpressiveMarkWithPointLightPreview() {
+    MeshExpressiveTheme(dynamicColor = false, darkTheme = false) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Активная оценка 4 с точкой
+            ExpressiveMarkPlaque(
+                mark = MarkItem(
+                    id = "1",
+                    value = 4,
+                    rawValue = "4.",
+                    isPoint = true,
+                    weight = 1.0
+                )
+            )
+            // Активная оценка 5 с точкой и весом 2
+            ExpressiveMarkPlaque(
+                mark = MarkItem(
+                    id = "2",
+                    value = 5,
+                    rawValue = "5.",
+                    isPoint = true,
+                    weight = 2.0
+                )
+            )
+            // Просроченная точка (становится красной 2)
+            ExpressiveMarkPlaque(
+                mark = MarkItem(
+                    id = "3",
+                    value = 2,
+                    rawValue = "2.",
+                    isPoint = true,
+                    pointDate = "2020-01-01"
+                )
+            )
+            // Просто точка без оценки
+            ExpressiveMarkPlaque(
+                mark = MarkItem(
+                    id = "4",
+                    value = 0,
+                    rawValue = ".",
+                    isPoint = true
+                )
+            )
+        }
+    }
+}
+
+@Preview(uiMode = 0x20, showBackground = true, backgroundColor = 0xFF121212, name = "Оценка с точкой (Тёмная тема)")
+@Composable
+fun ExpressiveMarkWithPointDarkPreview() {
+    MeshExpressiveTheme(dynamicColor = false, darkTheme = true) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Активная оценка 4 с точкой
+            ExpressiveMarkPlaque(
+                mark = MarkItem(
+                    id = "1",
+                    value = 4,
+                    rawValue = "4.",
+                    isPoint = true,
+                    weight = 1.0
+                )
+            )
+            // Активная оценка 5 с точкой и весом 2
+            ExpressiveMarkPlaque(
+                mark = MarkItem(
+                    id = "2",
+                    value = 5,
+                    rawValue = "5.",
+                    isPoint = true,
+                    weight = 2.0
+                )
+            )
+            // Просроченная точка (красная 2)
+            ExpressiveMarkPlaque(
+                mark = MarkItem(
+                    id = "3",
+                    value = 2,
+                    rawValue = "2.",
+                    isPoint = true,
+                    pointDate = "2020-01-01"
+                )
+            )
+            // Просто точка без оценки
+            ExpressiveMarkPlaque(
+                mark = MarkItem(
+                    id = "4",
+                    value = 0,
+                    rawValue = ".",
+                    isPoint = true
+                )
+            )
         }
     }
 }
