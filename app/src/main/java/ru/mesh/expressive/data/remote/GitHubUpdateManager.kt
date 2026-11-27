@@ -3,10 +3,8 @@ package ru.mesh.expressive.data.remote
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import ru.mesh.expressive.BuildConfig
-import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -22,7 +20,6 @@ class GitHubUpdateManager {
 
     companion object {
         private const val GITHUB_REPO = "ametistik1337/mesh_expressive"
-        private const val COUNTER_PING_URL = "http://204.77.3.91/mesh-counter/ping"
     }
 
     suspend fun checkForUpdates(): GitHubReleaseInfo? = withContext(Dispatchers.IO) {
@@ -136,36 +133,6 @@ class GitHubUpdateManager {
             Result.success(outFile)
         } catch (e: Exception) {
             Result.failure(e)
-        }
-    }
-
-    suspend fun syncActiveCounter(
-        installId: String,
-        vacationDates: List<String>
-    ): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val vacArray = JSONArray()
-            vacationDates.filter { it.length == 10 }.forEach { vacArray.put(it) }
-
-            val payload = JSONObject().apply {
-                put("install_id", installId.take(12))
-                put("vacations", vacArray)
-            }
-
-            val url = URL(COUNTER_PING_URL)
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 8000
-                readTimeout = 8000
-                doOutput = true
-                setRequestProperty("User-Agent", "MeshExpressive-Android")
-                setRequestProperty("Content-Type", "application/json")
-            }
-
-            OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
-            return@withContext conn.responseCode in 200..299
-        } catch (_: Exception) {
-            false
         }
     }
 }

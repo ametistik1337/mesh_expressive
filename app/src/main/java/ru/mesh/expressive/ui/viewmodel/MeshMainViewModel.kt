@@ -455,19 +455,6 @@ class MeshMainViewModel(
                     _availableUpdate.value = release
                 }
             } catch (_: Exception) {}
-
-            try {
-                val now = System.currentTimeMillis()
-                if (now - sessionManager.lastCounterPingTimestamp >= 24 * 60 * 60 * 1000L) {
-                    val schedules = sessionManager.cachedPeriodsSchedules.orEmpty()
-                    val vacDates = schedules.filter { it.type == "vacation" || it.title.contains("каникул", ignoreCase = true) }
-                        .map { it.date }
-                    val success = gitHubUpdateManager.syncActiveCounter(sessionManager.anonymousInstallId, vacDates)
-                    if (success) {
-                        sessionManager.lastCounterPingTimestamp = now
-                    }
-                }
-            } catch (_: Exception) {}
         }
     }
 

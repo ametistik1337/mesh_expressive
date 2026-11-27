@@ -147,21 +147,6 @@ class SessionManager(context: Context) {
         get() = prefs.getBoolean("is_auto_updates_counter_enabled", true)
         set(value) = prefs.edit().putBoolean("is_auto_updates_counter_enabled", value).apply()
 
-    var anonymousInstallId: String
-        get() {
-            var id = prefs.getString("anon_install_id", null)
-            if (id.isNullOrBlank()) {
-                id = java.util.UUID.randomUUID().toString().replace("-", "").take(12)
-                prefs.edit().putString("anon_install_id", id).apply()
-            }
-            return id
-        }
-        set(value) = prefs.edit().putString("anon_install_id", value).apply()
-
-    var lastCounterPingTimestamp: Long
-        get() = prefs.getLong("last_counter_ping_ts", 0L)
-        set(value) = prefs.edit().putLong("last_counter_ping_ts", value).apply()
-
     var dismissedUpdateVersion: String
         get() = prefs.getString("dismissed_update_version", "") ?: ""
         set(value) = prefs.edit().putString("dismissed_update_version", value).apply()
