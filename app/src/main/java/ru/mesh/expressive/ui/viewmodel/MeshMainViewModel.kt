@@ -194,13 +194,14 @@ class MeshMainViewModel(
     val isOffline: StateFlow<Boolean> = repository.isOffline
 
     val activeGpa: StateFlow<Double> = combine(
-        studentProfile,
-        ratingInfo
-    ) { profile, rInfo ->
-        if (profile.gpa > 0.0) {
+        subjectSummaries,
+        studentProfile
+    ) { subjects, profile ->
+        val avgs = subjects.map { it.averageMark }.filter { it > 0.0 }
+        if (avgs.isNotEmpty()) {
+            avgs.average()
+        } else if (profile.gpa > 0.0) {
             profile.gpa
-        } else if (rInfo.score > 0) {
-            rInfo.score / 20.0
         } else {
             0.0
         }
@@ -327,17 +328,46 @@ class MeshMainViewModel(
 
     val oauthManager = ru.mesh.expressive.data.remote.OAuthManager(sessionManager)
 
+    private val _selectedRegion = MutableStateFlow(sessionManager.getActiveRegion())
+    val selectedRegion: StateFlow<ru.mesh.expressive.data.remote.RegionConfig> = _selectedRegion.asStateFlow()
+
+    fun selectRegion(rgn: Int, customUrl: String? = sessionManager.customRegionUrl) {
+        if (customUrl != null) {
+            sessionManager.customRegionUrl = customUrl
+        }
+        sessionManager.selectedRegionId = rgn
+        _selectedRegion.value = sessionManager.getActiveRegion()
+    }
+
     private val _isOAuthLoading = MutableStateFlow(false)
     val isOAuthLoading: StateFlow<Boolean> = _isOAuthLoading.asStateFlow()
 
     private val _oAuthError = MutableStateFlow<String?>(null)
     val oAuthError: StateFlow<String?> = _oAuthError.asStateFlow()
 
-    fun startOAuthLogin(context: android.content.Context) {
+    private val _authWebViewUrl = MutableStateFlow<String?>(null)
+    val authWebViewUrl: StateFlow<String?> = _authWebViewUrl.asStateFlow()
+
+    fun prepareAuthWebViewUrl(useEsia: Boolean = true) {
+        _isOAuthLoading.value = true
+        _oAuthError.value = null
+        _authWebViewUrl.value = null
+        viewModelScope.launch {
+            val res = oauthManager.buildAuthUrl(useEsia = useEsia)
+            _isOAuthLoading.value = false
+            res.onSuccess { uri ->
+                _authWebViewUrl.value = uri.toString()
+            }.onFailure { err ->
+                _oAuthError.value = err.localizedMessage ?: "Не удалось подготовить страницу входа"
+            }
+        }
+    }
+
+    fun startOAuthLogin(context: android.content.Context, useEsia: Boolean = true) {
         _isOAuthLoading.value = true
         _oAuthError.value = null
         viewModelScope.launch {
-            val res = oauthManager.startAuthFlow(context)
+            val res = oauthManager.startAuthFlow(context, useEsia = useEsia)
             if (res.isFailure) {
                 _isOAuthLoading.value = false
                 _oAuthError.value = res.exceptionOrNull()?.localizedMessage ?: "Не удалось открыть браузер для авторизации"
@@ -368,6 +398,7 @@ class MeshMainViewModel(
     fun resetOAuthState() {
         _isOAuthLoading.value = false
         _oAuthError.value = null
+        _authWebViewUrl.value = null
     }
 
     private val _isTokenRefreshing = MutableStateFlow(false)
