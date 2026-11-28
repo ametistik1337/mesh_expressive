@@ -552,26 +552,74 @@ fun SegmentedPill(
     }
 }
 
+private fun isLessonCurrentlyOngoing(lesson: LessonScheduleItem): Boolean {
+    if (lesson.isCanceled) return false
+    if (lesson.isOngoing) return true
+    return try {
+        val now = java.util.Calendar.getInstance()
+        if (lesson.date.isNotBlank()) {
+            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(now.time)
+            if (lesson.date != today) return false
+        }
+        val currentSeconds = now.get(java.util.Calendar.HOUR_OF_DAY) * 3600 +
+            now.get(java.util.Calendar.MINUTE) * 60 +
+            now.get(java.util.Calendar.SECOND)
+        val startParts = lesson.startTime.split(":")
+        val endParts = lesson.endTime.split(":")
+        if (startParts.size >= 2 && endParts.size >= 2) {
+            val startSeconds = (startParts[0].trim().toInt() * 60 + startParts[1].trim().toInt()) * 60
+            val endSeconds = (endParts[0].trim().toInt() * 60 + endParts[1].trim().toInt()) * 60
+            currentSeconds in startSeconds until endSeconds
+        } else {
+            false
+        }
+    } catch (_: Exception) {
+        false
+    }
+}
+
 private fun calculateLessonProgress(startTime: String, endTime: String): Float {
     return try {
         val now = java.util.Calendar.getInstance()
-        val currentMinutes = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+        val currentSeconds = now.get(java.util.Calendar.HOUR_OF_DAY) * 3600 +
+            now.get(java.util.Calendar.MINUTE) * 60 +
+            now.get(java.util.Calendar.SECOND)
         val startParts = startTime.split(":")
         val endParts = endTime.split(":")
         if (startParts.size >= 2 && endParts.size >= 2) {
-            val startMinutes = startParts[0].trim().toInt() * 60 + startParts[1].trim().toInt()
-            val endMinutes = endParts[0].trim().toInt() * 60 + endParts[1].trim().toInt()
-            if (endMinutes > startMinutes) {
-                val fraction = (currentMinutes - startMinutes).toFloat() / (endMinutes - startMinutes).toFloat()
-                if (fraction in 0.01f..0.99f) {
-                    return fraction
-                }
+            val startSeconds = (startParts[0].trim().toInt() * 60 + startParts[1].trim().toInt()) * 60
+            val endSeconds = (endParts[0].trim().toInt() * 60 + endParts[1].trim().toInt()) * 60
+            if (endSeconds > startSeconds) {
+                return ((currentSeconds - startSeconds).toFloat() / (endSeconds - startSeconds).toFloat())
+                    .coerceIn(0f, 1f)
             }
         }
-        0.55f // Fallback / превью для отображения вне интервала звонков
+        0f
     } catch (_: Exception) {
-        0.55f
+        0f
     }
+}
+
+@Composable
+private fun rememberLessonProgress(startTime: String, endTime: String): Float {
+    var rawProgress by remember(startTime, endTime) {
+        mutableFloatStateOf(calculateLessonProgress(startTime, endTime))
+    }
+    LaunchedEffect(startTime, endTime) {
+        while (true) {
+            rawProgress = calculateLessonProgress(startTime, endTime)
+            kotlinx.coroutines.delay(10_000L)
+        }
+    }
+    val animatedProgress by animateFloatAsState(
+        targetValue = rawProgress,
+        animationSpec = spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
+        label = "lesson_progress"
+    )
+    return animatedProgress
 }
 
 @Composable
@@ -580,9 +628,18 @@ fun LessonCard(
     isCompact: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
+    var isOngoing by remember(lesson.id, lesson.date, lesson.startTime, lesson.endTime, lesson.isOngoing, lesson.isCanceled) {
+        mutableStateOf(isLessonCurrentlyOngoing(lesson))
+    }
+    LaunchedEffect(lesson.id, lesson.date, lesson.startTime, lesson.endTime, lesson.isOngoing, lesson.isCanceled) {
+        while (true) {
+            isOngoing = isLessonCurrentlyOngoing(lesson)
+            kotlinx.coroutines.delay(10_000L)
+        }
+    }
     if (isCompact) {
         val compactShape = RoundedCornerShape(14.dp)
-        val compactColor = if (lesson.isOngoing)
+        val compactColor = if (isOngoing)
             MaterialTheme.colorScheme.primaryContainer
         else
             MaterialTheme.colorScheme.surfaceContainerLow
@@ -593,17 +650,15 @@ fun LessonCard(
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             shape = compactShape,
             colors = CardDefaults.cardColors(
-                containerColor = if (lesson.isOngoing)
+                containerColor = if (isOngoing)
                     MaterialTheme.colorScheme.primaryContainer
                 else
                     MaterialTheme.colorScheme.surfaceContainerLow
             )
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                if (lesson.isOngoing) {
-                    val progress = remember(lesson.startTime, lesson.endTime) {
-                        calculateLessonProgress(lesson.startTime, lesson.endTime)
-                    }
+                if (isOngoing) {
+                    val progress = rememberLessonProgress(lesson.startTime, lesson.endTime)
                     Box(modifier = Modifier.matchParentSize()) {
                         Box(
                             modifier = Modifier
@@ -730,17 +785,15 @@ fun LessonCard(
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             shape = ExpressiveCardShape,
             colors = CardDefaults.cardColors(
-                containerColor = if (lesson.isOngoing)
+                containerColor = if (isOngoing)
                     MaterialTheme.colorScheme.primaryContainer
                 else
                     MaterialTheme.colorScheme.surfaceContainerLow
             )
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                if (lesson.isOngoing) {
-                    val progress = remember(lesson.startTime, lesson.endTime) {
-                        calculateLessonProgress(lesson.startTime, lesson.endTime)
-                    }
+                if (isOngoing) {
+                    val progress = rememberLessonProgress(lesson.startTime, lesson.endTime)
                     Box(modifier = Modifier.matchParentSize()) {
                         Box(
                             modifier = Modifier
