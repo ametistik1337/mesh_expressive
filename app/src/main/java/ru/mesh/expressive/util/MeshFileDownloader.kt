@@ -93,16 +93,20 @@ object MeshFileDownloader {
         }
 
         try {
+            val baseSchoolUrl = (sessionManager?.getActiveRegion()?.apiSchoolUrl
+                ?: ru.mesh.expressive.data.remote.RegionRegistry.currentRegion.apiSchoolUrl).trimEnd('/')
             val fullUrl = when {
-                url.startsWith("http://") || url.startsWith("https://") -> url
-                url.startsWith("/") -> "https://school.mos.ru$url"
-                else -> "https://school.mos.ru/$url"
+                url.startsWith("http://") || url.startsWith("https://") ->
+                    ru.mesh.expressive.data.remote.RegionRegistry.rewriteUrl(url)
+                url.startsWith("/") -> "$baseSchoolUrl$url"
+                else -> "$baseSchoolUrl/$url"
             }
 
             val requestBuilder = Request.Builder().url(fullUrl)
 
-            // Если запрос к экосистеме mos.ru, подставим авторизационные токены
-            if (fullUrl.contains("mos.ru") && sessionManager != null) {
+            val parsedHost = Uri.parse(fullUrl).host ?: ""
+            // Если запрос к экосистеме МЭШ / Моя школа, подставим авторизационные токены
+            if (ru.mesh.expressive.data.remote.RegionRegistry.isKnownSchoolHost(parsedHost) && sessionManager != null) {
                 val token = sessionManager.authToken
                 if (!token.isNullOrBlank()) {
                     val bearer = if (token.startsWith("Bearer ", ignoreCase = true)) token else "Bearer $token"

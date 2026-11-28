@@ -27,6 +27,7 @@ class OAuthManager(
 
     companion object {
         const val REDIRECT_URI = "dnevnik-mes://oauth2redirect"
+        const val REGION_REDIRECT_URI = "dnevnik-mes://authRegionRedirect"
         const val AUTH_ENDPOINT = "https://login.mos.ru/sps/oauth/ae"
         const val TOKEN_ENDPOINT = "https://login.mos.ru/sps/oauth/te"
         const val REGISTER_ENDPOINT = "https://login.mos.ru/sps/oauth/register"
@@ -121,26 +122,44 @@ class OAuthManager(
         Pair(parsed.clientId, parsed.clientSecret)
     }
 
-    suspend fun startAuthFlow(context: Context): Result<Unit> = withContext(Dispatchers.Main) {
+    suspend fun buildAuthUrl(useEsia: Boolean = true): Result<Uri> = withContext(Dispatchers.IO) {
         try {
-            val (clientId, _) = withContext(Dispatchers.IO) { getOrRegisterClient() }
-
-            val codeVerifier = generateCodeVerifier()
-            val codeChallenge = generateCodeChallenge(codeVerifier)
+            val region = sessionManager.getActiveRegion()
             val state = UUID.randomUUID().toString()
-
-            sessionManager.oauthCodeVerifier = codeVerifier
             sessionManager.oauthState = state
 
-            val authUrl = Uri.parse(AUTH_ENDPOINT).buildUpon()
-                .appendQueryParameter("client_id", clientId)
-                .appendQueryParameter("response_type", "code")
-                .appendQueryParameter("scope", "birthday contacts openid profile snils blitz_change_password blitz_user_rights blitz_qr_auth")
-                .appendQueryParameter("redirect_uri", REDIRECT_URI)
-                .appendQueryParameter("state", state)
-                .appendQueryParameter("code_challenge", codeChallenge)
-                .appendQueryParameter("code_challenge_method", "S256")
-                .build()
+            val authUrl = if (region.usesMosRuOAuth) {
+                val (clientId, _) = getOrRegisterClient()
+                val codeVerifier = generateCodeVerifier()
+                val codeChallenge = generateCodeChallenge(codeVerifier)
+                sessionManager.oauthCodeVerifier = codeVerifier
+
+                Uri.parse(AUTH_ENDPOINT).buildUpon()
+                    .appendQueryParameter("client_id", clientId)
+                    .appendQueryParameter("response_type", "code")
+                    .appendQueryParameter("scope", "birthday contacts openid profile snils blitz_change_password blitz_user_rights blitz_qr_auth")
+                    .appendQueryParameter("redirect_uri", REDIRECT_URI)
+                    .appendQueryParameter("state", state)
+                    .appendQueryParameter("code_challenge", codeChallenge)
+                    .appendQueryParameter("code_challenge_method", "S256")
+                    .build()
+            } else {
+                val authType = if (useEsia) "esia" else "kauth"
+                val baseUrl = region.authBaseUrl.trimEnd('/')
+                Uri.parse("$baseUrl/v3/auth/$authType/login").buildUpon()
+                    .appendQueryParameter("redirect_url", REGION_REDIRECT_URI)
+                    .appendQueryParameter("state", state)
+                    .build()
+            }
+            Result.success(authUrl)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun startAuthFlow(context: Context, useEsia: Boolean = true): Result<Unit> = withContext(Dispatchers.Main) {
+        try {
+            val authUrl = buildAuthUrl(useEsia).getOrElse { return@withContext Result.failure(it) }
 
             try {
                 val customTabsIntent = CustomTabsIntent.Builder()
@@ -170,6 +189,44 @@ class OAuthManager(
 
             if (savedState != null && state != null && savedState != state) {
                 return@withContext Result.failure(IllegalStateException("Несовпадение параметра state (CSRF защита)"))
+            }
+
+            val region = sessionManager.getActiveRegion()
+            val isRegionalRedirect = uri.host == "authRegionRedirect" || !region.usesMosRuOAuth
+
+            if (isRegionalRedirect) {
+                val effectiveState = state ?: savedState ?: ""
+                val tokenUrl = Uri.parse("${region.apiSchoolUrl.trimEnd('/')}/v3/auth/token").buildUpon()
+                    .appendQueryParameter("code", code)
+                    .appendQueryParameter("state", effectiveState)
+                    .build()
+                    .toString()
+
+                val req = Request.Builder()
+                    .url(tokenUrl)
+                    .get()
+                    .build()
+
+                val resp = okHttpClient.newCall(req).execute()
+                if (!resp.isSuccessful) {
+                    val errBody = resp.body?.string() ?: ""
+                    return@withContext Result.failure(IllegalStateException("Ошибка авторизации региона (${region.shortName}): HTTP ${resp.code} $errBody"))
+                }
+
+                val respJson = resp.body?.string() ?: ""
+                val (meshToken, meshRefreshToken, meshProfileId) = parseMeshAuthJson(respJson)
+                if (meshToken.isNullOrBlank()) {
+                    return@withContext Result.failure(IllegalStateException("Сервер региона не вернул токен: $respJson"))
+                }
+
+                sessionManager.authToken = meshToken
+                if (!meshRefreshToken.isNullOrBlank()) {
+                    sessionManager.meshRefreshToken = meshRefreshToken
+                }
+                if (!meshProfileId.isNullOrBlank()) {
+                    sessionManager.profileId = meshProfileId
+                }
+                return@withContext Result.success(meshToken)
             }
 
             val codeVerifier = sessionManager.oauthCodeVerifier
@@ -243,14 +300,17 @@ class OAuthManager(
 
     suspend fun refreshTokens(): Result<String> = withContext(Dispatchers.IO) {
         try {
-            // Попытка 1: Рефреш токена МЭШ напрямую по refresh_token
+            val region = sessionManager.getActiveRegion()
+            val refreshUrl = "${region.apiSchoolUrl.trimEnd('/')}/v3/token/refresh"
+
+            // Попытка 1: Рефреш токена МЭШ / Моя школа напрямую по refresh_token
             val meshRefresh = sessionManager.meshRefreshToken
             if (!meshRefresh.isNullOrBlank()) {
                 val formBody = FormBody.Builder()
                     .add("refresh_token", meshRefresh)
                     .build()
                 val request = Request.Builder()
-                    .url(MESH_REFRESH_ENDPOINT)
+                    .url(refreshUrl)
                     .post(formBody)
                     .addHeader("Content-Type", "application/x-www-form-urlencoded")
                     .build()

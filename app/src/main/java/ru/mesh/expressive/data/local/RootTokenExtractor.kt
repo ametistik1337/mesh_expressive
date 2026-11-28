@@ -21,7 +21,7 @@ object RootTokenExtractor {
 
         try {
             val myUid = AndroidProcess.myUid()
-            val packages = listOf("ru.mes.dnevnik", "ru.mesh.client", "ru.mesh.expressive")
+            val packages = listOf("ru.mes.dnevnik", "ru.mes.dnevnik.fgis", "ru.mesh.client", "ru.mesh.expressive")
             val copyCommands = packages.joinToString("; ") { pkg ->
                 "cp -r /data/data/$pkg/no_backup/ ${targetDir.absolutePath}/$pkg 2>/dev/null; " +
                 "cp -r /data/data/$pkg/shared_prefs/ ${targetDir.absolutePath}/$pkg 2>/dev/null; " +
@@ -63,12 +63,15 @@ object RootTokenExtractor {
                         val json = org.json.JSONObject(jsonStr)
                         val exp = json.optLong("exp", 0L)
                         val iss = json.optString("iss", "")
-                        if (iss.contains("school.mos.ru") && exp > nowSeconds) {
+                        val isKnownIssuer = ru.mesh.expressive.data.remote.RegionRegistry.isKnownSchoolHost(iss) ||
+                            iss.contains("mosreg.ru") || iss.contains("tatar.ru") ||
+                            iss.contains("72to.ru") || iss.contains("admoblkaluga.ru") || iss.contains("05edu.ru")
+                        if (isKnownIssuer && exp > nowSeconds) {
                             if (exp > bestExp) {
                                 bestExp = exp
                                 bestToken = tok
                             }
-                        } else if (bestToken == null && iss.contains("school.mos.ru")) {
+                        } else if (bestToken == null && isKnownIssuer) {
                             bestToken = tok
                         }
                     } catch (_: Exception) {}

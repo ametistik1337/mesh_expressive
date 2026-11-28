@@ -818,13 +818,14 @@ class MeshRepository(val sessionManager: SessionManager) {
                             hasDigitalTest = false,
                             createdAt = dateAssigned,
                             attachments = item.attachments.orEmpty().map { a ->
+                                val baseSchoolUrl = RegionRegistry.currentRegion.apiSchoolUrl.trimEnd('/')
                                 val downloadUrl = when {
-                                    !a.url.isNullOrBlank() -> a.url
-                                    !a.link.isNullOrBlank() -> a.link
+                                    !a.url.isNullOrBlank() -> RegionRegistry.rewriteUrl(a.url)
+                                    !a.link.isNullOrBlank() -> RegionRegistry.rewriteUrl(a.link)
                                     a.fileId != null && item.homeworkEntryStudentId != null ->
-                                        "https://school.mos.ru/api/family/mobile/v1/homeworks/${item.homeworkEntryStudentId}/attachment/${a.fileId}"
+                                        "$baseSchoolUrl/api/family/mobile/v1/homeworks/${item.homeworkEntryStudentId}/attachment/${a.fileId}"
                                     a.id != null && item.homeworkEntryStudentId != null ->
-                                        "https://school.mos.ru/api/family/mobile/v1/homeworks/${item.homeworkEntryStudentId}/attachment/${a.id}"
+                                        "$baseSchoolUrl/api/family/mobile/v1/homeworks/${item.homeworkEntryStudentId}/attachment/${a.id}"
                                     else -> ""
                                 }
                                 HomeworkAttachmentItem(
@@ -2523,10 +2524,11 @@ class MeshRepository(val sessionManager: SessionManager) {
                                 ?: detailed?.urls?.firstOrNull()?.url
                                 ?: mat.urls?.firstOrNull()?.url
 
+                            val baseSchoolUrl = RegionRegistry.currentRegion.apiSchoolUrl.trimEnd('/')
                             val finalUrl = when {
-                                !launchUrl.isNullOrBlank() -> launchUrl
-                                !mat.uuid.isNullOrBlank() -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.uuid}/launch", "UTF-8")}"
-                                mat.id != null -> "https://school.mos.ru/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.id}/launch", "UTF-8")}"
+                                !launchUrl.isNullOrBlank() -> RegionRegistry.rewriteUrl(launchUrl)
+                                !mat.uuid.isNullOrBlank() -> "$baseSchoolUrl/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.uuid}/launch", "UTF-8")}"
+                                mat.id != null -> "$baseSchoolUrl/api/launcher/v1/launch?activity_url=${java.net.URLEncoder.encode("https://uchebnik.mos.ru/cms/materials/${mat.id}/launch", "UTF-8")}"
                                 else -> "https://uchebnik.mos.ru"
                             }
 
@@ -3141,8 +3143,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                         "variant" to 1
                     )
                 )
+                val baseSchoolUrl = RegionRegistry.currentRegion.apiSchoolUrl.trimEnd('/')
                 val createReq = okhttp3.Request.Builder()
-                    .url("https://school.mos.ru/api/ej/attachments/v1/student_work")
+                    .url("$baseSchoolUrl/api/ej/attachments/v1/student_work")
                     .post(createJson.toRequestBody("application/json".toMediaType()))
                     .addHeader("Authorization", "Bearer $token")
                     .addHeader("Profile-id", profileId)
@@ -3171,8 +3174,9 @@ class MeshRepository(val sessionManager: SessionManager) {
                 lessonWorkIdCache[lessonScheduleItemId] = workId
             }
 
+            val baseSchoolUrl = RegionRegistry.currentRegion.apiSchoolUrl.trimEnd('/')
             val accessReq = okhttp3.Request.Builder()
-                .url("https://school.mos.ru/api/ej/attachments/v1/files/by_student_work/$workId/storage_access")
+                .url("$baseSchoolUrl/api/ej/attachments/v1/files/by_student_work/$workId/storage_access")
                 .post("{}".toRequestBody("application/json".toMediaType()))
                 .addHeader("Authorization", "Bearer $token")
                 .addHeader("Profile-id", profileId)
@@ -3228,7 +3232,7 @@ class MeshRepository(val sessionManager: SessionManager) {
                 )
             )
             val attachReq = okhttp3.Request.Builder()
-                .url("https://school.mos.ru/api/ej/attachments/v1/files/by_student_work/$workId")
+                .url("${RegionRegistry.currentRegion.apiSchoolUrl.trimEnd('/')}/api/ej/attachments/v1/files/by_student_work/$workId")
                 .post(attachJson.toRequestBody("application/json".toMediaType()))
                 .addHeader("Authorization", "Bearer $token")
                 .addHeader("Profile-id", profileId)

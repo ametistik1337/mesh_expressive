@@ -748,6 +748,21 @@ object MeshNetworkClient {
 
     var onUnauthorizedListener: (() -> Unit)? = null
 
+    private val regionHostInterceptor = okhttp3.Interceptor { chain ->
+        val request = chain.request()
+        val url = request.url
+        val targetHost = RegionRegistry.currentRegion.apiHost
+        val newRequest = if (url.host == "school.mos.ru" && targetHost != "school.mos.ru") {
+            val newUrl = url.newBuilder()
+                .host(targetHost)
+                .build()
+            request.newBuilder().url(newUrl).build()
+        } else {
+            request
+        }
+        chain.proceed(newRequest)
+    }
+
     private val authInterceptor = okhttp3.Interceptor { chain ->
         val request = chain.request()
         val response = chain.proceed(request)
@@ -765,6 +780,7 @@ object MeshNetworkClient {
     }
 
     val okHttpClient = OkHttpClient.Builder()
+        .addInterceptor(regionHostInterceptor)
         .addInterceptor(authInterceptor)
         .addInterceptor(logging)
         .connectTimeout(15, TimeUnit.SECONDS)

@@ -6,10 +6,34 @@ import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import ru.mesh.expressive.data.model.*
+import ru.mesh.expressive.data.remote.RegionConfig
+import ru.mesh.expressive.data.remote.RegionRegistry
 
 class SessionManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("mesh_expressive_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
+
+    init {
+        RegionRegistry.setActiveRegion(selectedRegionId, customRegionUrl)
+    }
+
+    var selectedRegionId: Int
+        get() = prefs.getInt("selected_region_id", RegionRegistry.REGION_MOSCOW)
+        set(value) {
+            prefs.edit().putInt("selected_region_id", value).apply()
+            RegionRegistry.setActiveRegion(value, customRegionUrl)
+        }
+
+    var customRegionUrl: String?
+        get() = prefs.getString("custom_region_url", null)
+        set(value) {
+            prefs.edit().putString("custom_region_url", value).apply()
+            RegionRegistry.setActiveRegion(selectedRegionId, value)
+        }
+
+    fun getActiveRegion(): RegionConfig {
+        return RegionRegistry.setActiveRegion(selectedRegionId, customRegionUrl)
+    }
 
     var authToken: String?
         get() = prefs.getString("auth_token", null)

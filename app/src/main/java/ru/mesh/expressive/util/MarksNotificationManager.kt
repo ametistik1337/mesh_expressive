@@ -130,12 +130,13 @@ object MarksNotificationManager {
         val profileId = sessionManager.profileId
 
         try {
+            val region = sessionManager.getActiveRegion()
             val client = OkHttpClient.Builder()
                 .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                 .build()
             val req = Request.Builder()
-                .url("https://school.mos.ru/api/family/mobile/v1/notifications/search?student_id=$studentId")
+                .url("${region.apiSchoolUrl.trimEnd('/')}/api/family/mobile/v1/notifications/search?student_id=$studentId")
                 .get()
                 .addHeader("Authorization", "Bearer $token")
                 .addHeader("Auth-Token", token)

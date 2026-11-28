@@ -4,6 +4,11 @@
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
+            <certificates src="@raw/russian_trusted_root_ca" />
+            <certificates src="@raw/russian_trusted_sub_ca" />
+            <certificates src="@raw/ministry_of_digital_root" />
+            <certificates src="@raw/ministry_of_digital_sub" />
+            <certificates src="@raw/ministry_of_digital_sub_2024" />
         </trust-anchors>
     </base-config>
 </network-security-config>

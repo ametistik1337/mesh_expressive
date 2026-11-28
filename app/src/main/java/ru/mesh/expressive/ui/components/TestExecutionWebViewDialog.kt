@@ -183,7 +183,14 @@ fun TestExecutionWebViewDialog(viewModel: MeshMainViewModel) {
                                 val token = viewModel.sessionManager.authToken?.replace("Bearer ", "") ?: ""
                                 val contingentGuid = profile.contingentGuid.ifBlank { "3473f068-8ec0-47a1-920a-a18e75d6c389" }
 
-                                val cookieTargets = listOf("https://school.mos.ru", "https://uchebnik.mos.ru", "https://mos.ru")
+                                val activeRegion = viewModel.sessionManager.getActiveRegion()
+                                val cookieTargets = listOf(
+                                    activeRegion.apiSchoolUrl,
+                                    activeRegion.apiBaseUrl,
+                                    "https://school.mos.ru",
+                                    "https://uchebnik.mos.ru",
+                                    "https://mos.ru"
+                                ).distinct()
                                 val cookieList = listOf(
                                     "auth_token=$token",
                                     "aupd_token=$token",
@@ -220,7 +227,7 @@ fun TestExecutionWebViewDialog(viewModel: MeshMainViewModel) {
                                     }
                                 }
 
-                                if (targetUrl.contains("school.mos.ru") && !targetUrl.contains("launcher")) {
+                                if ((targetUrl.contains("school.mos.ru") || targetUrl.contains(activeRegion.apiHost)) && !targetUrl.contains("launcher")) {
                                     val headers = mutableMapOf<String, String>()
                                     if (token.isNotBlank()) {
                                         headers["Authorization"] = "Bearer $token"

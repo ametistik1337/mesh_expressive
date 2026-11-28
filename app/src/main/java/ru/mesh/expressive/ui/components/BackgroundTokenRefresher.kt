@@ -127,7 +127,7 @@ fun ReAuthDialog(
             Text("Сессия истекла", fontWeight = FontWeight.Bold)
         },
         text = {
-            Text("Срок действия сессии mos.ru завершился. Пожалуйста, выполните повторный вход через mos.ru.")
+            Text("Срок действия сессии завершился. Пожалуйста, выполните повторный вход.")
         },
         confirmButton = {
             Button(
