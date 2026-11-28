@@ -2,9 +2,24 @@ package ru.mesh.expressive.ui.screens
 
 import ru.mesh.expressive.ui.components.ExpressiveIconButton
 
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
+import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.net.http.SslError
 import androidx.compose.animation.*
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -17,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,7 +40,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.launch
 import ru.mesh.expressive.data.local.RootTokenExtractor
 import ru.mesh.expressive.ui.components.M3CircularWavyLoader
@@ -32,7 +50,7 @@ import ru.mesh.expressive.ui.theme.*
 import ru.mesh.expressive.ui.viewmodel.MeshMainViewModel
 
 enum class AuthScreenState {
-    WELCOME_LANDING, OAUTH_WAITING, ROOT_AND_MANUAL_TOKEN
+    WELCOME_LANDING, WEBVIEW_LOGIN, OAUTH_WAITING, ROOT_AND_MANUAL_TOKEN
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,7 +60,7 @@ fun AuthScreen(
     onAuthSuccess: () -> Unit
 ) {
     val context = LocalContext.current
-    var screenState by remember { mutableStateOf(AuthScreenState.WELCOME_LANDING) }
+    var screenState by rememberSaveable { mutableStateOf(AuthScreenState.WELCOME_LANDING) }
     var manualToken by remember { mutableStateOf("") }
     var isExtractingRoot by remember { mutableStateOf(false) }
     var rootDialogMessage by remember { mutableStateOf<String?>(null) }
@@ -50,6 +68,10 @@ fun AuthScreen(
 
     val isOAuthLoading by viewModel.isOAuthLoading.collectAsState()
     val oAuthError by viewModel.oAuthError.collectAsState()
+    val authWebViewUrl by viewModel.authWebViewUrl.collectAsState()
+    val selectedRegion by viewModel.selectedRegion.collectAsState()
+    var lastUseEsia by rememberSaveable { mutableStateOf(true) }
+    var showRegionPicker by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
@@ -59,7 +81,8 @@ fun AuthScreen(
                     title = {
                         Text(
                             text = when (screenState) {
-                                AuthScreenState.OAUTH_WAITING -> "Вход через mos.ru"
+                                AuthScreenState.WEBVIEW_LOGIN,
+                                AuthScreenState.OAUTH_WAITING -> if (selectedRegion.usesMosRuOAuth) "Вход через mos.ru" else "Вход: ${selectedRegion.shortName}"
                                 AuthScreenState.ROOT_AND_MANUAL_TOKEN -> "Импорт токена"
                                 else -> "Вход в МЭШ"
                             },
@@ -79,6 +102,14 @@ fun AuthScreen(
                         }
                     },
                     actions = {
+                        if (screenState == AuthScreenState.WEBVIEW_LOGIN) {
+                            ExpressiveIconButton(tooltipText = "Открыть в браузере", onClick = {
+                                screenState = AuthScreenState.OAUTH_WAITING
+                                viewModel.startOAuthLogin(context, useEsia = lastUseEsia)
+                            }) {
+                                Icon(Icons.Default.OpenInBrowser, contentDescription = "Открыть в браузере")
+                            }
+                        }
                         ExpressiveIconButton(tooltipText = "Инструкция", onClick = { showHowItWorksDialog = true }) {
                             Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = "Инструкция")
                         }
@@ -95,17 +126,46 @@ fun AuthScreen(
         ) {
             AnimatedContent(
                 targetState = screenState,
+                transitionSpec = {
+                    (fadeIn(animationSpec = spring(dampingRatio = 1f, stiffness = 1600f)) +
+                        slideInHorizontally(animationSpec = spring(dampingRatio = 0.9f, stiffness = 700f)) { it / 12 }) togetherWith
+                        fadeOut(animationSpec = spring(dampingRatio = 1f, stiffness = 1600f))
+                },
                 label = "AuthScreenStateAnimation"
             ) { targetState ->
                 when (targetState) {
                     AuthScreenState.WELCOME_LANDING -> {
                         WelcomeLandingView(
-                            onLoginMosRuClick = {
+                            selectedRegion = selectedRegion,
+                            onSelectRegionClick = { showRegionPicker = true },
+                            onLoginPrimaryClick = {
+                                lastUseEsia = true
                                 screenState = AuthScreenState.OAUTH_WAITING
-                                viewModel.startOAuthLogin(context)
+                                viewModel.startOAuthLogin(context, useEsia = true)
                             },
-                            onRootTokenClick = { screenState = AuthScreenState.ROOT_AND_MANUAL_TOKEN },
+                            onLoginKauthClick = {
+                                lastUseEsia = false
+                                screenState = AuthScreenState.OAUTH_WAITING
+                                viewModel.startOAuthLogin(context, useEsia = false)
+                            },
                             onContinueDemoClick = onAuthSuccess
+                        )
+                    }
+
+                    AuthScreenState.WEBVIEW_LOGIN -> {
+                        InAppAuthWebView(
+                            url = authWebViewUrl,
+                            isLoading = isOAuthLoading,
+                            error = oAuthError,
+                            onDeepLinkCaptured = { uri ->
+                                screenState = AuthScreenState.OAUTH_WAITING
+                                viewModel.handleAuthDeepLink(uri, onSuccess = onAuthSuccess)
+                            },
+                            onRetry = { viewModel.prepareAuthWebViewUrl(useEsia = lastUseEsia) },
+                            onOpenExternalBrowser = {
+                                screenState = AuthScreenState.OAUTH_WAITING
+                                viewModel.startOAuthLogin(context, useEsia = lastUseEsia)
+                            }
                         )
                     }
 
@@ -113,7 +173,7 @@ fun AuthScreen(
                         OAuthWaitingView(
                             isLoading = isOAuthLoading,
                             error = oAuthError,
-                            onRetry = { viewModel.startOAuthLogin(context) },
+                            onRetry = { viewModel.startOAuthLogin(context, useEsia = lastUseEsia) },
                             onCancel = {
                                 viewModel.resetOAuthState()
                                 screenState = AuthScreenState.WELCOME_LANDING
@@ -165,7 +225,7 @@ fun AuthScreen(
                                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                                             )
                                             Text(
-                                                text = "Извлекает активную сессию из официального ru.mes.dnevnik",
+                                                text = "Извлекает активную сессию из ru.mes.dnevnik или Моя школа",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                             )
@@ -360,6 +420,22 @@ fun AuthScreen(
             }
         )
     }
+
+    if (showRegionPicker) {
+        RegionPickerModalSheet(
+            selectedRegion = selectedRegion,
+            initialCustomUrl = viewModel.sessionManager.customRegionUrl ?: "",
+            onSelectPreset = { rgn ->
+                viewModel.selectRegion(rgn)
+                showRegionPicker = false
+            },
+            onSelectCustom = { customUrl ->
+                viewModel.selectRegion(ru.mesh.expressive.data.remote.RegionRegistry.REGION_CUSTOM, customUrl)
+                showRegionPicker = false
+            },
+            onDismiss = { showRegionPicker = false }
+        )
+    }
 }
 
 @Composable
@@ -502,28 +578,76 @@ private fun HowItWorksInfoItem(
 
 @Composable
 private fun WelcomeLandingView(
-    onLoginMosRuClick: () -> Unit,
-    onRootTokenClick: () -> Unit,
+    selectedRegion: ru.mesh.expressive.data.remote.RegionConfig,
+    onSelectRegionClick: () -> Unit,
+    onLoginPrimaryClick: () -> Unit,
+    onLoginKauthClick: () -> Unit,
     onContinueDemoClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 32.dp),
+            .padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
+        // Top: universal region selector
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(PillShape)
+                .clickable(onClick = onSelectRegionClick),
+            shape = PillShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Public,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = selectedRegion.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = selectedRegion.apiHost,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Выбрать регион",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Center: compact hero emblem + title
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // App Emblem
             Box(
                 modifier = Modifier
-                    .size(96.dp)
+                    .size(88.dp)
                     .clip(M3Cookie7Shape(7))
                     .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center
@@ -532,11 +656,11 @@ private fun WelcomeLandingView(
                     imageVector = Icons.Default.School,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(52.dp)
+                    modifier = Modifier.size(46.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Text(
                 text = "Дневник МЭШ",
@@ -549,52 +673,21 @@ private fun WelcomeLandingView(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Современный клиент электронного дневника в стиле Material 3 Expressive",
+                text = "Material 3 Expressive клиент без трекеров и телеметрии",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // Feature Highlights
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                WelcomeFeatureRow(
-                    icon = Icons.Default.DoneAll,
-                    title = "Авто-сдача заданий за звезды",
-                    subtitle = "Мгновенное выполнение ЦДЗ и получение наград в 1 клик"
-                )
-                WelcomeFeatureRow(
-                    icon = Icons.Default.Shield,
-                    title = "0 трекеров и чистый трафик",
-                    subtitle = "Без AppMetrica, геотрекинга «Спутник» и телеметрии"
-                )
-                WelcomeFeatureRow(
-                    icon = Icons.Default.Palette,
-                    title = "Material 3 Expressive & Monet",
-                    subtitle = "Адаптивная тема обоев, пружинная физика и чистый UI"
-                )
-                WelcomeFeatureRow(
-                    icon = Icons.Default.Restaurant,
-                    title = "Москвёнок и Рейтинг щедрости",
-                    subtitle = "Точный баланс карты, лимиты и рейтинг потраченных звезд"
-                )
-            }
         }
 
-        Spacer(modifier = Modifier.height(36.dp))
-
-        // Action Buttons
+        // Bottom: primary action buttons without scroll
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Button(
-                onClick = onLoginMosRuClick,
+                onClick = onLoginPrimaryClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp),
@@ -607,26 +700,28 @@ private fun WelcomeLandingView(
                 Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Войти через mos.ru",
+                    text = if (selectedRegion.usesMosRuOAuth) "Войти через mos.ru" else "Войти через Госуслуги (ЕСИА)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
 
-            OutlinedButton(
-                onClick = onRootTokenClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                shape = PillShape
-            ) {
-                Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Импорт через Root / Токен",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
+            if (!selectedRegion.usesMosRuOAuth) {
+                OutlinedButton(
+                    onClick = onLoginKauthClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = PillShape
+                ) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Логин региона (${selectedRegion.shortName})",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
             TextButton(
@@ -635,20 +730,11 @@ private fun WelcomeLandingView(
                 shape = PillShape
             ) {
                 Text(
-                    text = "Открыть в демонстрационном режиме",
+                    text = "Демо-режим",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "semi vibecoded by gemini",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
         }
     }
 }
@@ -696,6 +782,370 @@ private fun WelcomeFeatureRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RegionPickerModalSheet(
+    selectedRegion: ru.mesh.expressive.data.remote.RegionConfig,
+    initialCustomUrl: String,
+    onSelectPreset: (Int) -> Unit,
+    onSelectCustom: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var showCustomInput by remember {
+        mutableStateOf(selectedRegion.rgn == ru.mesh.expressive.data.remote.RegionRegistry.REGION_CUSTOM)
+    }
+    var customUrlText by remember { mutableStateOf(initialCustomUrl) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Выберите регион",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            Text(
+                text = "Москва (МЭШ) или региональная система ФГИС «Моя школа»",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            ru.mesh.expressive.data.remote.RegionRegistry.PRESET_REGIONS.forEach { region ->
+                val isSelected = selectedRegion.rgn == region.rgn && !showCustomInput
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(ExpressiveCardShape)
+                        .clickable { onSelectPreset(region.rgn) },
+                    shape = ExpressiveCardShape,
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = region.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = region.apiHost,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(ExpressiveCardShape)
+                    .clickable { showCustomInput = !showCustomInput },
+                shape = ExpressiveCardShape,
+                color = if (showCustomInput) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Другой регион (свой домен)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (showCustomInput) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Указать адрес регионального сервера ФГИС вручную",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (showCustomInput) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = if (showCustomInput) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (showCustomInput) {
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = customUrlText,
+                    onValueChange = { customUrlText = it },
+                    label = { Text("Адрес сервера (например myschool.yanao.ru)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Button(
+                    onClick = { onSelectCustom(customUrlText) },
+                    enabled = ru.mesh.expressive.data.remote.RegionRegistry.normalizeBaseUrl(customUrlText) != null,
+                    shape = PillShape,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Применить сервер")
+                }
+            }
+        }
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun InAppAuthWebView(
+    url: String?,
+    isLoading: Boolean,
+    error: String?,
+    onDeepLinkCaptured: (Uri) -> Unit,
+    onRetry: () -> Unit,
+    onOpenExternalBrowser: () -> Unit
+) {
+    val context = LocalContext.current
+    var pageProgress by remember { mutableIntStateOf(0) }
+    var isPageLoading by remember { mutableStateOf(true) }
+    var webViewError by remember { mutableStateOf<String?>(null) }
+    var lastLoadedUrl by remember { mutableStateOf<String?>(null) }
+    val webViewStateBundle = rememberSaveable { android.os.Bundle() }
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            webViewRef?.saveState(webViewStateBundle)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        val displayError = error ?: webViewError
+        when {
+            displayError != null -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ErrorOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = displayError,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = {
+                        webViewError = null
+                        lastLoadedUrl = null
+                        onRetry()
+                    }, shape = PillShape) {
+                        Text("Повторить")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = onOpenExternalBrowser) {
+                        Text("Открыть в браузере")
+                    }
+                }
+            }
+
+            url.isNullOrBlank() || isLoading -> {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    M3CircularWavyLoader(size = 56.dp, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Подготовка страницы входа...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            else -> {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                databaseEnabled = true
+                                useWideViewPort = true
+                                loadWithOverviewMode = true
+                                javaScriptCanOpenWindowsAutomatically = true
+                                mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                                userAgentString = userAgentString.replace("; wv", "")
+                            }
+                            val cookieManager = CookieManager.getInstance()
+                            cookieManager.setAcceptCookie(true)
+                            cookieManager.setAcceptThirdPartyCookies(this, true)
+
+                            webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                                ): Boolean {
+                                    val reqUri = request?.url ?: return false
+                                    if (reqUri.scheme == "dnevnik-mes") {
+                                        onDeepLinkCaptured(reqUri)
+                                        return true
+                                    }
+                                    if (reqUri.scheme != "http" && reqUri.scheme != "https") {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, reqUri).apply {
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (_: Exception) {
+                                        }
+                                        return true
+                                    }
+                                    return false
+                                }
+
+                                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                    isPageLoading = true
+                                }
+
+                                override fun onPageFinished(view: WebView?, url: String?) {
+                                    isPageLoading = false
+                                }
+
+                                override fun onReceivedError(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                    error: WebResourceError?
+                                ) {
+                                    if (request?.isForMainFrame == true) {
+                                        isPageLoading = false
+                                        webViewError = "Ошибка загрузки (${error?.errorCode}): ${error?.description}"
+                                    }
+                                }
+
+                                override fun onReceivedSslError(
+                                    view: WebView?,
+                                    handler: SslErrorHandler?,
+                                    error: SslError?
+                                ) {
+                                    handler?.cancel()
+                                    val failedUrl = error?.url.orEmpty()
+                                    val currentMainUrl = view?.url.orEmpty()
+                                    val isMainFrameSslError = failedUrl.isNotBlank() &&
+                                        (failedUrl == currentMainUrl ||
+                                            failedUrl.contains("login.mos.ru") ||
+                                            failedUrl.contains("gosuslugi.ru") ||
+                                            ru.mesh.expressive.data.remote.RegionRegistry.isKnownSchoolHost(
+                                                Uri.parse(failedUrl).host.orEmpty()
+                                            ))
+                                    if (isMainFrameSslError) {
+                                        isPageLoading = false
+                                        webViewError = "Ошибка SSL сертификата (${error?.primaryError}): $failedUrl"
+                                    }
+                                }
+                            }
+
+                            webChromeClient = object : WebChromeClient() {
+                                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                    pageProgress = newProgress
+                                    if (newProgress >= 100) isPageLoading = false
+                                }
+                            }
+
+                            webViewRef = this
+                            lastLoadedUrl = url
+                            if (!webViewStateBundle.isEmpty) {
+                                restoreState(webViewStateBundle)
+                            } else {
+                                loadUrl(url)
+                            }
+                        }
+                    },
+                    update = { webView ->
+                        if (url.isNotBlank() && lastLoadedUrl != url) {
+                            lastLoadedUrl = url
+                            webView.loadUrl(url)
+                        }
+                    }
+                )
+
+                if (isPageLoading && pageProgress < 100) {
+                    LinearProgressIndicator(
+                        progress = { pageProgress / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 915)
+@Composable
+private fun AuthWelcomeMoscowPreview() {
+    MeshExpressiveTheme(darkTheme = true) {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            WelcomeLandingView(
+                selectedRegion = ru.mesh.expressive.data.remote.RegionRegistry.MOSCOW,
+                onSelectRegionClick = {},
+                onLoginPrimaryClick = {},
+                onLoginKauthClick = {},
+                onContinueDemoClick = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 915)
+@Composable
+private fun AuthWelcomeRegionPreview() {
+    MeshExpressiveTheme(darkTheme = true) {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            WelcomeLandingView(
+                selectedRegion = ru.mesh.expressive.data.remote.RegionRegistry.PRESET_REGIONS[1],
+                onSelectRegionClick = {},
+                onLoginPrimaryClick = {},
+                onLoginKauthClick = {},
+                onContinueDemoClick = {}
+            )
         }
     }
 }
