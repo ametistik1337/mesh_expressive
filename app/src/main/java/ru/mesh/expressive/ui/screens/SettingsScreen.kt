@@ -142,94 +142,95 @@ fun SettingsScreen(
             contentPadding = PaddingValues(top = 6.dp, bottom = 120.dp)
         ) {
         if (selectedSettingsTab.first == "GENERAL") {
-        // 1. Account & Profile Card
+        // 1. Account & Profile Card (M3 Expressive Segmented Hero)
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveHeroShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 6.dp, bottomEnd = 6.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                        Box(
+                            modifier = Modifier
+                                .size(60.dp)
+                                .clickable { showAvatarDialog = true }
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(64.dp)
-                                    .clickable { showAvatarDialog = true }
+                                    .size(56.dp)
+                                    .align(Alignment.Center)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
                             ) {
-                                // Clipped Cookie Avatar
-                                Box(
-                                    modifier = Modifier
-                                        .size(58.dp)
-                                        .align(Alignment.Center)
-                                        .clip(M3Cookie7Shape(7))
-                                        .background(MaterialTheme.colorScheme.primary),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (!profile.avatarUrl.isNullOrBlank()) {
-                                        AsyncImage(
-                                            model = profile.avatarUrl,
-                                            contentDescription = "Аватар",
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    } else {
-                                        val initials = "${profile.firstName.firstOrNull() ?: 'М'}${profile.lastName.firstOrNull() ?: 'Э'}"
-                                        Text(
-                                            text = initials,
-                                            color = MaterialTheme.colorScheme.onPrimary,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                // Unclipped camera badge on top
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surface,
-                                    shadowElevation = 3.dp,
-                                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surfaceContainer),
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .align(Alignment.BottomEnd)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.PhotoCamera,
-                                            contentDescription = "Сменить аватар",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                    }
+                                if (!profile.avatarUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = profile.avatarUrl,
+                                        contentDescription = "Аватар",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    val initials = "${profile.firstName.firstOrNull() ?: 'М'}${profile.lastName.firstOrNull() ?: 'Э'}"
+                                    Text(
+                                        text = initials,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column {
-                                Text(
-                                    text = if (viewModel.isLoggedIn) "${profile.firstName} ${profile.lastName}" else "Демо-режим",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Text(
-                                    text = if (viewModel.isLoggedIn) "${profile.className} • ${profile.schoolName}" else "Локальные демо-данные",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                                )
+
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                shadowElevation = 2.dp,
+                                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surfaceContainerHigh),
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .align(Alignment.BottomEnd)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.PhotoCamera,
+                                        contentDescription = "Сменить аватар",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                             }
                         }
 
-                        Button(
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (viewModel.isLoggedIn) "${profile.firstName} ${profile.lastName}" else "Демо-режим",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (viewModel.isLoggedIn) "${profile.className} • ${profile.schoolName}" else "Локальные демо-данные",
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        ru.mesh.expressive.ui.components.ExpressiveIconButton(
+                            tooltipText = if (viewModel.isLoggedIn) "Выйти из аккаунта" else "Войти",
                             onClick = {
                                 if (viewModel.isLoggedIn) {
                                     viewModel.logout()
@@ -237,113 +238,93 @@ fun SettingsScreen(
                                     onNavigateToAuth()
                                 }
                             },
-                            shape = PillShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(44.dp)
                         ) {
                             Icon(
                                 imageVector = if (viewModel.isLoggedIn) Icons.AutoMirrored.Filled.Logout else Icons.AutoMirrored.Filled.Login,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
+                                contentDescription = if (viewModel.isLoggedIn) "Выйти" else "Войти",
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (viewModel.isLoggedIn) "Выйти" else "Войти")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f))
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { showAvatarDialog = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Сменить аватар", style = MaterialTheme.typography.labelSmall)
-                        }
-
-                        if (viewModel.isLoggedIn) {
-                            TextButton(
-                                onClick = { showClassInfoDialog = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Класс", style = MaterialTheme.typography.labelSmall)
-                            }
-
-                            TextButton(
-                                onClick = { showTokenDialog = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Токен (JWT)", style = MaterialTheme.typography.labelSmall)
-                            }
                         }
                     }
                 }
-            }
-        }
 
-        // Проверить обновления
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    SettingsActionRow(
-                        icon = Icons.Default.SystemUpdate,
-                        title = if (isCheckingUpdate) "Проверка..." else "Проверить обновления",
-                        subtitle = "Свежие сборки и релизы на GitHub",
-                        onClick = {
-                            viewModel.checkForUpdatesManual { hasUpdate, message ->
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    )
-                }
-            }
-        }
-
-        // 2. Privacy & Security Banner
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = ScoreGreenContainer)
-            ) {
+                // Нижний сегмент: быстрые действия профиля в стиле M3 Connected Group
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Surface(
+                        onClick = { showAvatarDialog = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(
+                            topStart = 6.dp,
+                            topEnd = 6.dp,
+                            bottomStart = 24.dp,
+                            bottomEnd = if (viewModel.isLoggedIn) 6.dp else 24.dp
+                        ),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Аватар", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        }
+                    }
+
+                    if (viewModel.isLoggedIn) {
+                        Surface(
+                            onClick = { showClassInfoDialog = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Класс", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            }
+                        }
+
+                        Surface(
+                            onClick = { showTokenDialog = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 6.dp, bottomEnd = 24.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Токен", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Privacy & Security Banner (Monet tonal)
+        item {
+            ExpressiveSegmentedCard(index = 0, count = 1, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(M3Cookie7Shape(7))
-                            .background(ScoreGreen),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
+                    SettingsIconBadge(icon = Icons.Default.Shield, accent = true)
 
                     Spacer(modifier = Modifier.width(14.dp))
 
@@ -351,13 +332,13 @@ fun SettingsScreen(
                         Text(
                             text = "Приватность 100% — Чистый стек",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = ScoreGreen
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "0 трекеров, 0 фонового GPS, прямой TLS к school.mos.ru",
                             style = MaterialTheme.typography.bodySmall,
-                            color = ScoreGreen.copy(alpha = 0.9f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -369,48 +350,31 @@ fun SettingsScreen(
         if (selectedSettingsTab.first == "APPEARANCE") {
         // 3. Section: Внешний вид и интерфейс
         item {
-            Text(
-                text = "Внешний вид и интерфейс",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    // Theme Mode Selector
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.DarkMode, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column {
-                                Text("Тема оформления", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                Text("Светлый, тёмный или системный режим", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsSectionHeader("Внешний вид и интерфейс")
+                ExpressiveSegmentedCard(index = 0, count = 5) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SettingsIconBadge(icon = Icons.Default.DarkMode)
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text("Тема оформления", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Светлый, тёмный или системный режим", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        val themeOptions = remember {
-                            listOf("SYSTEM" to "Системная", "DARK" to "Тёмная", "LIGHT" to "Светлая")
-                        }
-                        val selectedThemeOption = themeOptions.find { it.first == themeMode } ?: themeOptions.first()
-                        ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
-                            items = themeOptions,
-                            selectedItem = selectedThemeOption,
-                            onItemSelected = { viewModel.setThemeMode(it.first) },
-                            label = { it.second },
-                            showCheckmark = true,
-                            scrollable = false
-                        )
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // AMOLED Black Switch
+                    val themeOptions = remember {
+                        listOf("SYSTEM" to "Системная", "DARK" to "Тёмная", "LIGHT" to "Светлая")
+                    }
+                    val selectedThemeOption = themeOptions.find { it.first == themeMode } ?: themeOptions.first()
+                    ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                        items = themeOptions,
+                        selectedItem = selectedThemeOption,
+                        onItemSelected = { viewModel.setThemeMode(it.first) },
+                        label = { it.second },
+                        showCheckmark = true,
+                        scrollable = false
+                    )
+                }
+                ExpressiveSegmentedCard(index = 1, count = 5) {
                     SettingsToggleRow(
                         icon = Icons.Default.Contrast,
                         title = "AMOLED чёрный",
@@ -418,21 +382,18 @@ fun SettingsScreen(
                         isChecked = isAmoledDark,
                         onCheckedChange = { viewModel.toggleAmoledDark(it) }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Monet Dynamic Theme
+                }
+                ExpressiveSegmentedCard(index = 2, count = 5) {
                     SettingsToggleRow(
                         icon = Icons.Default.Palette,
                         title = "Monet Dynamic Color",
                         subtitle = "Адаптивные цвета под обои устройства (Material You)",
                         isChecked = isMonetEnabled,
+                        accentIcon = true,
                         onCheckedChange = onToggleMonet
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Spring Physics
+                }
+                ExpressiveSegmentedCard(index = 3, count = 5) {
                     SettingsToggleRow(
                         icon = Icons.Default.TouchApp,
                         title = "Пружинная физика анимаций",
@@ -440,10 +401,8 @@ fun SettingsScreen(
                         isChecked = enableSpringPhysics,
                         onCheckedChange = { viewModel.toggleEnableSpringPhysics(it) }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Haptic Feedback
+                }
+                ExpressiveSegmentedCard(index = 4, count = 5) {
                     SettingsToggleRow(
                         icon = Icons.Default.Vibration,
                         title = "Тактильный отклик (Вибрация)",
@@ -457,48 +416,34 @@ fun SettingsScreen(
 
         // Section: Навигация и стартовый экран
         item {
-            Text(
-                text = "Навигация и экран запуска",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column {
-                                Text("Стартовый экран", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                Text("Какой раздел открывать первым при входе в приложение", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsSectionHeader("Навигация и экран запуска")
+                ExpressiveSegmentedCard(index = 0, count = 1) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SettingsIconBadge(icon = Icons.Default.Home)
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text("Стартовый экран", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Какой раздел открывать первым при входе в приложение", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        val startTabOptions = remember {
-                            listOf(
-                                "DASHBOARD" to "Главная",
-                                "SCHEDULE" to "Расписание",
-                                "HOMEWORK" to "Задания",
-                                "MARKS" to "Оценки"
-                            )
-                        }
-                        val selectedStartTabOption = startTabOptions.find { it.first == startTab } ?: startTabOptions.first()
-                        ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
-                            items = startTabOptions,
-                            selectedItem = selectedStartTabOption,
-                            onItemSelected = { viewModel.setStartTab(it.first) },
-                            label = { it.second },
-                            showCheckmark = true,
-                            scrollable = true
+                    }
+                    val startTabOptions = remember {
+                        listOf(
+                            "DASHBOARD" to "Главная",
+                            "SCHEDULE" to "Расписание",
+                            "HOMEWORK" to "Задания",
+                            "MARKS" to "Оценки"
                         )
                     }
+                    val selectedStartTabOption = startTabOptions.find { it.first == startTab } ?: startTabOptions.first()
+                    ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                        items = startTabOptions,
+                        selectedItem = selectedStartTabOption,
+                        onItemSelected = { viewModel.setStartTab(it.first) },
+                        label = { it.second },
+                        showCheckmark = true,
+                        scrollable = true
+                    )
                 }
             }
         }
@@ -508,21 +453,9 @@ fun SettingsScreen(
         if (selectedSettingsTab.first == "STUDY") {
         // Section: Расписание и Домашние задания
         item {
-            Text(
-                text = "Расписание и Задания",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    // Compact Schedule
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsSectionHeader("Расписание и Задания")
+                ExpressiveSegmentedCard(index = 0, count = 3) {
                     SettingsToggleRow(
                         icon = Icons.Default.ViewAgenda,
                         title = "Компактный вид расписания",
@@ -530,10 +463,8 @@ fun SettingsScreen(
                         isChecked = isCompactSchedule,
                         onCheckedChange = { viewModel.toggleCompactSchedule(it) }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Hide Empty Schedule Days
+                }
+                ExpressiveSegmentedCard(index = 1, count = 3) {
                     SettingsToggleRow(
                         icon = Icons.Default.EventBusy,
                         title = "Скрывать пустые дни",
@@ -541,10 +472,8 @@ fun SettingsScreen(
                         isChecked = hideEmptyScheduleDays,
                         onCheckedChange = { viewModel.toggleHideEmptyScheduleDays(it) }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Hide Completed Homework
+                }
+                ExpressiveSegmentedCard(index = 2, count = 3) {
                     SettingsToggleRow(
                         icon = Icons.Default.CheckCircleOutline,
                         title = "Скрывать сделанную домашку",
@@ -558,112 +487,79 @@ fun SettingsScreen(
 
         // 4. Section: Оценки и Успеваемость
         item {
-            Text(
-                text = "Оценки и Цели успеваемости",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    // Weighted GPA
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsSectionHeader("Оценки и Цели успеваемости")
+                ExpressiveSegmentedCard(index = 0, count = 3) {
                     SettingsToggleRow(
                         icon = Icons.Default.Calculate,
                         title = "Средневзвешенный балл",
                         subtitle = "Учитывать коэффициенты веса контрольных и экзаменов",
                         isChecked = showWeightedGpa,
+                        accentIcon = true,
                         onCheckedChange = { viewModel.toggleShowWeightedGpa(it) }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Study Periods Mode Selector
-                    Column {
+                }
+                ExpressiveSegmentedCard(index = 1, count = 3) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SettingsIconBadge(icon = Icons.Default.CalendarMonth)
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text("Оценочные периоды", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Автоопределение по API МЭШ или ручной выбор", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    val periodOptions = remember {
+                        listOf(
+                            "AUTO" to "Авто",
+                            "SEMESTERS" to "Полугодия",
+                            "QUARTERS" to "Четверти",
+                            "TRIMESTERS" to "Триместры",
+                            "MODULES" to "Модули"
+                        )
+                    }
+                    val selectedPair = periodOptions.find { it.first == studyPeriodMode } ?: periodOptions.first()
+                    ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                        items = periodOptions,
+                        selectedItem = selectedPair,
+                        onItemSelected = { viewModel.setStudyPeriodMode(it.first) },
+                        label = { it.second },
+                        scrollable = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                ExpressiveSegmentedCard(index = 2, count = 3) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            SettingsIconBadge(icon = Icons.Default.Grade)
                             Spacer(modifier = Modifier.width(14.dp))
-                            Column {
-                                Text("Оценочные периоды", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                Text("Автоопределение по API МЭШ или ручной выбор", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            Text("Целевой средний балл", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        val periodOptions = remember {
-                            listOf(
-                                "AUTO" to "Авто",
-                                "SEMESTERS" to "Полугодия",
-                                "QUARTERS" to "Четверти",
-                                "TRIMESTERS" to "Триместры",
-                                "MODULES" to "Модули"
-                            )
-                        }
-                        val selectedPair = periodOptions.find { it.first == studyPeriodMode } ?: periodOptions.first()
-                        ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
-                            items = periodOptions,
-                            selectedItem = selectedPair,
-                            onItemSelected = { viewModel.setStudyPeriodMode(it.first) },
-                            label = { it.second },
-                            scrollable = true,
-                            modifier = Modifier.fillMaxWidth()
+                        Text(
+                            text = String.format(java.util.Locale.US, "%.2f", gpaTargetScore),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Target GPA Slider
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Grade, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Text("Целевой средний балл", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            }
-                            Text(
-                                text = String.format(java.util.Locale.US, "%.2f", gpaTargetScore),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Slider(
-                            value = gpaTargetScore,
-                            onValueChange = { viewModel.setGpaTargetScore((it * 100).roundToInt() / 100f) },
-                            valueRange = 4.00f..5.00f,
-                            steps = 9
-                        )
-                    }
+                    Slider(
+                        value = gpaTargetScore,
+                        onValueChange = { viewModel.setGpaTargetScore((it * 100).roundToInt() / 100f) },
+                        valueRange = 4.00f..5.00f,
+                        steps = 9
+                    )
                 }
             }
         }
 
         // 5. Section: Звезды и Автоматизация
         item {
-            Text(
-                text = "Звезды и Автоматизация",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    // Infinite Stars Override
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsSectionHeader("Звезды и Автоматизация")
+                ExpressiveSegmentedCard(index = 0, count = 2) {
                     SettingsToggleRow(
                         icon = Icons.Default.Star,
                         title = "Режим бесконечных звезд",
@@ -671,10 +567,8 @@ fun SettingsScreen(
                         isChecked = gamification.infiniteStarsOverride,
                         onCheckedChange = { viewModel.toggleInfiniteStars(it) }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Hide Completed Quests
+                }
+                ExpressiveSegmentedCard(index = 1, count = 2) {
                     SettingsToggleRow(
                         icon = Icons.Default.CheckCircleOutline,
                         title = "Скрывать сданные задания",
@@ -691,25 +585,15 @@ fun SettingsScreen(
         if (selectedSettingsTab.first == "NOTIFICATIONS") {
         // 5.5. Section: Уведомления об оценках
         item {
-            Text(
-                text = "Уведомления об оценках",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsSectionHeader("Уведомления об оценках")
+                ExpressiveSegmentedCard(index = 0, count = 1) {
                     SettingsToggleRow(
                         icon = Icons.Default.NotificationsActive,
                         title = "Уведомления об оценках",
                         subtitle = "Фоновый мониторинг выставления, исправлений и точек",
                         isChecked = notifyConfig.enabled,
+                        accentIcon = true,
                         onCheckedChange = { enable ->
                             if (enable && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
                                 !ru.mesh.expressive.util.MarksNotificationManager.hasNotificationPermission(context)
@@ -720,167 +604,165 @@ fun SettingsScreen(
                             }
                         }
                     )
+                }
+            }
+        }
 
-                    androidx.compose.animation.AnimatedVisibility(visible = notifyConfig.enabled) {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        if (notifyConfig.enabled) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SettingsSectionHeader("События")
+                    ExpressiveSegmentedCard(index = 0, count = 5) {
+                        SettingsToggleRow(
+                            icon = Icons.Default.AddTask,
+                            title = "Новые оценки",
+                            subtitle = "При выставлении новой оценки в журнал",
+                            isChecked = notifyConfig.notifyNew,
+                            onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyNew = v) } }
+                        )
+                    }
+                    ExpressiveSegmentedCard(index = 1, count = 5) {
+                        SettingsToggleRow(
+                            icon = Icons.Default.EditNote,
+                            title = "Исправления и изменения",
+                            subtitle = "Когда оценка изменена или закрыта точка (2. → 5*)",
+                            isChecked = notifyConfig.notifyChanged,
+                            onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyChanged = v) } }
+                        )
+                    }
+                    ExpressiveSegmentedCard(index = 2, count = 5) {
+                        SettingsToggleRow(
+                            icon = Icons.Default.FiberManualRecord,
+                            title = "Выставление точки",
+                            subtitle = "Уведомлять о новой точке и дате её сдачи",
+                            isChecked = notifyConfig.notifyPoint,
+                            onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyPoint = v) } }
+                        )
+                    }
+                    ExpressiveSegmentedCard(index = 3, count = 5) {
+                        SettingsToggleRow(
+                            icon = Icons.Default.Alarm,
+                            title = "Истекающие точки",
+                            subtitle = "Напоминание за 2 дня до дедлайна сдачи",
+                            isChecked = notifyConfig.notifyPointExpiring,
+                            onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyPointExpiring = v) } }
+                        )
+                    }
+                    ExpressiveSegmentedCard(index = 4, count = 5) {
+                        SettingsToggleRow(
+                            icon = Icons.Default.Verified,
+                            title = "Итоговые оценки",
+                            subtitle = "При выставлении оценки за четверть или год",
+                            isChecked = notifyConfig.notifyFinal,
+                            onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyFinal = v) } }
+                        )
+                    }
+                }
+            }
 
-                            Text(
-                                text = "События",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-
-                            SettingsToggleRow(
-                                icon = Icons.Default.AddTask,
-                                title = "Новые оценки",
-                                subtitle = "При выставлении новой оценки в журнал",
-                                isChecked = notifyConfig.notifyNew,
-                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyNew = v) } }
-                            )
-
-                            SettingsToggleRow(
-                                icon = Icons.Default.EditNote,
-                                title = "Исправления и изменения",
-                                subtitle = "Когда оценка изменена или закрыта точка (2. → 5*)",
-                                isChecked = notifyConfig.notifyChanged,
-                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyChanged = v) } }
-                            )
-
-                            SettingsToggleRow(
-                                icon = Icons.Default.FiberManualRecord,
-                                title = "Выставление точки",
-                                subtitle = "Уведомлять о новой точке и дате её сдачи",
-                                isChecked = notifyConfig.notifyPoint,
-                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyPoint = v) } }
-                            )
-
-                            SettingsToggleRow(
-                                icon = Icons.Default.Alarm,
-                                title = "Истекающие точки",
-                                subtitle = "Напоминание за 2 дня до дедлайна сдачи",
-                                isChecked = notifyConfig.notifyPointExpiring,
-                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyPointExpiring = v) } }
-                            )
-
-                            SettingsToggleRow(
-                                icon = Icons.Default.Verified,
-                                title = "Итоговые оценки",
-                                subtitle = "При выставлении оценки за четверть или год",
-                                isChecked = notifyConfig.notifyFinal,
-                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(notifyFinal = v) } }
-                            )
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                            Text(
-                                text = "Фильтр по баллам",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                listOf(5, 4, 3, 2).forEach { markVal ->
-                                    val selected = markVal in notifyConfig.notifyValues
-                                    FilterChip(
-                                        selected = selected,
-                                        onClick = {
-                                            viewModel.updateMarksNotifyConfig(context) { cfg ->
-                                                val updated = if (selected) cfg.notifyValues - markVal else cfg.notifyValues + markVal
-                                                cfg.copy(notifyValues = updated)
-                                            }
-                                        },
-                                        label = {
-                                            Text(
-                                                text = "$markVal",
-                                                fontWeight = FontWeight.Bold,
-                                                maxLines = 1
-                                            )
-                                        },
-                                        shape = PillShape,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                            Text(
-                                text = "Формат и расписание",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-
-                            SettingsToggleRow(
-                                icon = Icons.Default.Subject,
-                                title = "Детали работы и вес",
-                                subtitle = "Показывать форму контроля, тему и вес оценки",
-                                isChecked = notifyConfig.showDetails,
-                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(showDetails = v) } }
-                            )
-
-                            SettingsToggleRow(
-                                icon = Icons.Default.TrendingUp,
-                                title = "Сдвиг среднего балла",
-                                subtitle = "Показывать изменение балла предмета (4.33 → 4.50)",
-                                isChecked = notifyConfig.showGpaDelta,
-                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(showGpaDelta = v) } }
-                            )
-
-                            SettingsToggleRow(
-                                icon = Icons.Default.NightsStay,
-                                title = "Тихие часы (22:00 – 08:00)",
-                                subtitle = "Не присылать уведомления ночью",
-                                isChecked = notifyConfig.quietHours,
-                                onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(quietHours = v) } }
-                            )
-
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = "Частота проверки ленты событий МЭШ",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                val intervals = remember {
-                                    listOf(1 to "1 м", 5 to "5 м", 15 to "15 м", 30 to "30 м")
-                                }
-                                val selectedInterval = intervals.find { it.first == notifyConfig.intervalMin } ?: intervals[1]
-                                ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
-                                    items = intervals,
-                                    selectedItem = selectedInterval,
-                                    onItemSelected = { opt ->
-                                        viewModel.updateMarksNotifyConfig(context) { it.copy(intervalMin = opt.first) }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SettingsSectionHeader("Фильтр по баллам")
+                    ExpressiveSegmentedCard(index = 0, count = 1) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(5, 4, 3, 2).forEach { markVal ->
+                                val selected = markVal in notifyConfig.notifyValues
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = {
+                                        viewModel.updateMarksNotifyConfig(context) { cfg ->
+                                            val updated = if (selected) cfg.notifyValues - markVal else cfg.notifyValues + markVal
+                                            cfg.copy(notifyValues = updated)
+                                        }
                                     },
-                                    label = { it.second },
-                                    showCheckmark = false,
-                                    scrollable = false
+                                    label = {
+                                        Text(
+                                            text = "$markVal",
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    },
+                                    shape = PillShape,
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
+                        }
+                    }
+                }
+            }
 
-                            FilledTonalButton(
-                                onClick = {
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
-                                        !ru.mesh.expressive.util.MarksNotificationManager.hasNotificationPermission(context)
-                                    ) {
-                                        notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                                    } else {
-                                        viewModel.sendTestMarksNotification(context)
-                                        Toast.makeText(context, "Тестовое уведомление отправлено", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                shape = PillShape,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Отправить тестовое уведомление")
-                            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SettingsSectionHeader("Формат и расписание")
+                    ExpressiveSegmentedCard(index = 0, count = 5) {
+                        SettingsToggleRow(
+                            icon = Icons.Default.Subject,
+                            title = "Детали работы и вес",
+                            subtitle = "Показывать форму контроля, тему и вес оценки",
+                            isChecked = notifyConfig.showDetails,
+                            onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(showDetails = v) } }
+                        )
+                    }
+                    ExpressiveSegmentedCard(index = 1, count = 5) {
+                        SettingsToggleRow(
+                            icon = Icons.Default.TrendingUp,
+                            title = "Сдвиг среднего балла",
+                            subtitle = "Показывать изменение балла предмета (4.33 → 4.50)",
+                            isChecked = notifyConfig.showGpaDelta,
+                            onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(showGpaDelta = v) } }
+                        )
+                    }
+                    ExpressiveSegmentedCard(index = 2, count = 5) {
+                        SettingsToggleRow(
+                            icon = Icons.Default.NightsStay,
+                            title = "Тихие часы (22:00 – 08:00)",
+                            subtitle = "Не присылать уведомления ночью",
+                            isChecked = notifyConfig.quietHours,
+                            onCheckedChange = { v -> viewModel.updateMarksNotifyConfig(context) { it.copy(quietHours = v) } }
+                        )
+                    }
+                    ExpressiveSegmentedCard(index = 3, count = 5) {
+                        Text(
+                            text = "Частота проверки ленты событий МЭШ",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        val intervals = remember {
+                            listOf(1 to "1 м", 5 to "5 м", 15 to "15 м", 30 to "30 м")
+                        }
+                        val selectedInterval = intervals.find { it.first == notifyConfig.intervalMin } ?: intervals[1]
+                        ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                            items = intervals,
+                            selectedItem = selectedInterval,
+                            onItemSelected = { opt ->
+                                viewModel.updateMarksNotifyConfig(context) { it.copy(intervalMin = opt.first) }
+                            },
+                            label = { it.second },
+                            showCheckmark = false,
+                            scrollable = false
+                        )
+                    }
+                    ExpressiveSegmentedCard(index = 4, count = 5) {
+                        FilledTonalButton(
+                            onClick = {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                                    !ru.mesh.expressive.util.MarksNotificationManager.hasNotificationPermission(context)
+                                ) {
+                                    notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    viewModel.sendTestMarksNotification(context)
+                                    Toast.makeText(context, "Тестовое уведомление отправлено", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            shape = PillShape,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Отправить тестовое уведомление")
                         }
                     }
                 }
@@ -890,29 +772,31 @@ fun SettingsScreen(
         } // end NOTIFICATIONS
 
         if (selectedSettingsTab.first == "GENERAL") {
-        // 6. Section: Синхронизация и Сеть
+        // 6. Section: Синхронизация и обновления
         item {
-            Text(
-                text = "Синхронизация данных",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsSectionHeader("Обновления и синхронизация")
+                ExpressiveSegmentedCard(index = 0, count = 2) {
+                    SettingsActionRow(
+                        icon = Icons.Default.SystemUpdate,
+                        title = if (isCheckingUpdate) "Проверка..." else "Проверить обновления",
+                        subtitle = "Свежие сборки и релизы на GitHub",
+                        accentIcon = true,
+                        onClick = {
+                            viewModel.checkForUpdatesManual { _, message ->
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+                ExpressiveSegmentedCard(index = 1, count = 2) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            SettingsIconBadge(icon = Icons.Default.Sync)
                             Spacer(modifier = Modifier.width(14.dp))
                             Column {
                                 Text("Период авто-обновления", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -933,7 +817,7 @@ fun SettingsScreen(
                         }
                     }
 
-                    Button(
+                    FilledTonalButton(
                         onClick = { viewModel.refreshData() },
                         modifier = Modifier.fillMaxWidth(),
                         shape = PillShape,
@@ -941,30 +825,34 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (isRefreshing) "Обновление..." else "Принудительно обновить данные сейчас")
+                        Text(if (isRefreshing) "Обновление..." else "Обновить данные сейчас")
                     }
+                }
+            }
+        }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Replay Onboarding Tour
+        // 7. Section: Разделы и обучение
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsSectionHeader("Помощь и разделы")
+                ExpressiveSegmentedCard(index = 0, count = 2) {
                     SettingsActionRow(
                         icon = Icons.Default.School,
                         title = "Обучение и подсказки",
-                        subtitle = "Пройти интерактивный гид по функциям приложения заново",
+                        subtitle = "Пройти интерактивный гид по приложению заново",
                         onClick = {
                             viewModel.restartOnboardingGuide()
                             viewModel.selectTab(ru.mesh.expressive.ui.viewmodel.MainTab.DASHBOARD)
                             Toast.makeText(context, "Интерактивный гид запущен", Toast.LENGTH_SHORT).show()
                         }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Go to Portfolio
+                }
+                ExpressiveSegmentedCard(index = 1, count = 2) {
                     SettingsActionRow(
                         icon = Icons.Default.EmojiEvents,
                         title = "Портфолио и Олимпиады",
                         subtitle = "Все дипломы, ВсОШ, МОШ и награды ученика",
+                        accentIcon = true,
                         onClick = {
                             viewModel.selectTab(ru.mesh.expressive.ui.viewmodel.MainTab.PORTFOLIO)
                         }
@@ -973,96 +861,83 @@ fun SettingsScreen(
             }
         }
 
-        // 8. Section: Сброс и Очистка
+        // 8. Section: Система и о приложении
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsSectionHeader("Система")
+                ExpressiveSegmentedCard(
+                    index = 0,
+                    count = 2,
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Сброс данных и сессии",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Text(
-                            text = "Очищает сохраненный токен, профиль и локальный кэш",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = { showResetConfirmDialog = true },
-                        shape = PillShape,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Очистить")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(MaterialTheme.colorScheme.errorContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteSweep,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = "Сброс данных и сессии",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Text(
+                                    text = "Очищает токен, профиль и кэш",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        OutlinedButton(
+                            onClick = { showResetConfirmDialog = true },
+                            shape = PillShape,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Очистить")
+                        }
                     }
                 }
-            }
-        }
-
-        // Section: Обновления и счётчик
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    SettingsToggleRow(
-                        icon = Icons.Default.CloudSync,
-                        title = "Автообновления и счётчик",
-                        subtitle = "Проверка новых релизов на GitHub и анонимный счётчик активных пользователей",
-                        isChecked = isAutoUpdatesAndCounterEnabled,
-                        onCheckedChange = { viewModel.toggleAutoUpdatesAndCounter(it) }
-                    )
-                }
-            }
-        }
-
-        // 9. About App
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = ExpressiveCardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                ExpressiveSegmentedCard(
+                    index = 1,
+                    count = 2,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+                ) {
                     Text(
-                        text = "Дневник МЭШ Expressive",
-                        style = MaterialTheme.typography.titleMedium,
+                        text = "Дневник МЭШ Expressive • v${ru.mesh.expressive.BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Версия ${ru.mesh.expressive.BuildConfig.VERSION_NAME} • Material Design 3 Expressive • Open Source",
+                        text = "Material Design 3 Expressive • Open Source • Без трекеров и рекламы",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Чистый клиент Московской электронной школы. Без трекеров, без рекламы, с прямой работой через боевые API.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "semi vibecoded by gemini",
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
@@ -1205,7 +1080,7 @@ fun SettingsScreen(
                     Box(
                         modifier = Modifier
                             .size(110.dp)
-                            .clip(M3Cookie7Shape(7))
+                            .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
@@ -1312,11 +1187,70 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun SettingsSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun ExpressiveSegmentedCard(
+    index: Int,
+    count: Int,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = segmentedItemShape(index, count),
+        color = containerColor
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun SettingsIconBadge(
+    icon: ImageVector,
+    accent: Boolean = false
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (accent) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceContainerHighest
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (accent) MaterialTheme.colorScheme.onPrimaryContainer
+            else MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
 private fun SettingsToggleRow(
     icon: ImageVector,
     title: String,
     subtitle: String,
     isChecked: Boolean,
+    accentIcon: Boolean = false,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
@@ -1324,7 +1258,7 @@ private fun SettingsToggleRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable { onCheckedChange(!isChecked) }
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1332,12 +1266,7 @@ private fun SettingsToggleRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
+            SettingsIconBadge(icon = icon, accent = accentIcon)
             Spacer(modifier = Modifier.width(14.dp))
             Column {
                 Text(
@@ -1367,6 +1296,7 @@ private fun SettingsActionRow(
     icon: ImageVector,
     title: String,
     subtitle: String,
+    accentIcon: Boolean = false,
     onClick: () -> Unit
 ) {
     Row(
@@ -1374,7 +1304,7 @@ private fun SettingsActionRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1382,12 +1312,7 @@ private fun SettingsActionRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
+            SettingsIconBadge(icon = icon, accent = accentIcon)
             Spacer(modifier = Modifier.width(14.dp))
             Column {
                 Text(
@@ -1408,5 +1333,246 @@ private fun SettingsActionRow(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(20.dp)
         )
+    }
+}
+
+private fun segmentedItemShape(index: Int, count: Int): RoundedCornerShape {
+    val outer = 20.dp
+    val inner = 6.dp
+    return when {
+        count <= 1 -> RoundedCornerShape(outer)
+        index == 0 -> RoundedCornerShape(topStart = outer, topEnd = outer, bottomStart = inner, bottomEnd = inner)
+        index == count - 1 -> RoundedCornerShape(topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = outer)
+        else -> RoundedCornerShape(inner)
+    }
+}
+
+@Composable
+private fun ExpressiveSegmentedToggleRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    isChecked: Boolean,
+    accentIcon: Boolean = false
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = segmentedItemShape(index, count),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (accentIcon) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerHighest
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (accentIcon) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            ru.mesh.expressive.ui.components.ExpressiveSwitch(checked = isChecked, onCheckedChange = {})
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, widthDp = 412, heightDp = 900)
+@Composable
+fun SettingsRedesignGreenMonetPreview() {
+    val greenMonet = darkColorScheme(
+        primary = Color(0xFF8CD6A4),
+        onPrimary = Color(0xFF00391D),
+        primaryContainer = Color(0xFF0A522D),
+        onPrimaryContainer = Color(0xFFA7F3BF),
+        secondary = Color(0xFFB5CCB9),
+        onSecondary = Color(0xFF213527),
+        secondaryContainer = Color(0xFF284D37),
+        onSecondaryContainer = Color(0xFFC6EBD0),
+        background = Color(0xFF111411),
+        onBackground = Color(0xFFE1E3DF),
+        surface = Color(0xFF111411),
+        onSurface = Color(0xFFE1E3DF),
+        surfaceVariant = Color(0xFF414942),
+        onSurfaceVariant = Color(0xFFC1C9C0),
+        surfaceContainerLowest = Color(0xFF0C0F0C),
+        surfaceContainerLow = Color(0xFF191D19),
+        surfaceContainer = Color(0xFF1D211D),
+        surfaceContainerHigh = Color(0xFF272B27),
+        surfaceContainerHighest = Color(0xFF323632)
+    )
+    MaterialTheme(colorScheme = greenMonet) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Настройки",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier.padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "ИА",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Иван Алексеев",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "ГБОУ Школа № 315 • 8В",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Внешний вид",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 12.dp, bottom = 6.dp)
+                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = segmentedItemShape(0, 4),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.DarkMode, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column {
+                                    Text("Тема оформления", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                    Text("Системная, тёмная или светлая", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            val opts = listOf("SYS" to "Системная", "DARK" to "Тёмная", "LIGHT" to "Светлая")
+                            ru.mesh.expressive.ui.components.M3ConnectedButtonGroup(
+                                items = opts,
+                                selectedItem = opts[1],
+                                onItemSelected = {},
+                                label = { it.second },
+                                showCheckmark = true,
+                                scrollable = false
+                            )
+                        }
+                    }
+                    ExpressiveSegmentedToggleRow(
+                        index = 1, count = 4,
+                        icon = Icons.Default.Palette,
+                        title = "Monet Dynamic Color",
+                        subtitle = "Цвета под обои устройства",
+                        isChecked = true,
+                        accentIcon = true
+                    )
+                    ExpressiveSegmentedToggleRow(
+                        index = 2, count = 4,
+                        icon = Icons.Default.Contrast,
+                        title = "AMOLED чёрный",
+                        subtitle = "Чистый чёрный фон (#000000)",
+                        isChecked = false
+                    )
+                    ExpressiveSegmentedToggleRow(
+                        index = 3, count = 4,
+                        icon = Icons.Default.TouchApp,
+                        title = "Пружинная физика",
+                        subtitle = "Упругие переходы Material Expressive",
+                        isChecked = true
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Учёба и уведомления",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 12.dp, bottom = 6.dp)
+                    )
+                    ExpressiveSegmentedToggleRow(
+                        index = 0, count = 2,
+                        icon = Icons.Default.NotificationsActive,
+                        title = "Уведомления об оценках",
+                        subtitle = "Мгновенный пуш о новых баллах",
+                        isChecked = true,
+                        accentIcon = true
+                    )
+                    ExpressiveSegmentedToggleRow(
+                        index = 1, count = 2,
+                        icon = Icons.Default.Calculate,
+                        title = "Учитывать просроченные точки",
+                        subtitle = "Строгий расчёт GPA по формуле МЭШ",
+                        isChecked = true
+                    )
+                }
+            }
+        }
     }
 }

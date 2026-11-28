@@ -587,7 +587,7 @@ fun MeshMainApp(
                                     Box(
                                         modifier = Modifier
                                             .size(52.dp)
-                                            .clip(M3Cookie7Shape(7))
+                                            .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.primaryContainer),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -831,7 +831,7 @@ fun MeshMainApp(
                                     Box(
                                         modifier = Modifier
                                             .size(36.dp)
-                                             .clip(M3Cookie7Shape(7))
+                                            .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.primaryContainer),
                                         contentAlignment = Alignment.Center
                                     ) {

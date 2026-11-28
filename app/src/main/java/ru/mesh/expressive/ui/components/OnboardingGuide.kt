@@ -156,18 +156,11 @@ fun OnboardingGuideOverlay(
                 description = "Внизу экрана расположен удобный док для быстрого переключения в 1 касание между Главной, Расписанием, ДЗ, Оценками и Подарками.",
                 icon = Icons.Default.Dashboard,
                 arrowDirection = ArrowDirection.BOTTOM_CENTER
-            ),
-            SpotlightGuideStep(
-                title = "Автообновления и счётчик",
-                description = "Проверка новых релизов на GitHub со ссылкой на обновление и анонимный счётчик активных пользователей без сбора персональных данных.",
-                icon = Icons.Default.CloudSync,
-                arrowDirection = ArrowDirection.BOTTOM_CENTER
             )
         )
     }
 
     var currentStepIndex by remember { mutableIntStateOf(0) }
-    var updatesAndCounterEnabled by remember { mutableStateOf(initialUpdatesEnabled) }
     val currentStep = steps[currentStepIndex]
     val isLastStep = currentStepIndex == steps.size - 1
 
@@ -311,16 +304,11 @@ fun OnboardingGuideOverlay(
             }
 
             val cardAlignment = when (currentStepIndex) {
-                3 -> Alignment.Center
                 2 -> Alignment.BottomCenter
                 else -> Alignment.TopCenter
             }
 
-            val actualShape = if (currentStepIndex == 3) {
-                ru.mesh.expressive.ui.theme.ExpressiveCardShape
-            } else {
-                bubbleShape
-            }
+            val actualShape = bubbleShape
 
             Box(
                 modifier = Modifier
@@ -421,45 +409,6 @@ fun OnboardingGuideOverlay(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 21.sp
                     )
-
-                    if (currentStepIndex == 3) {
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Включить автообновления и счётчик",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "По желанию. Можно отключить в Настройках",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                ExpressiveSwitch(
-                                    checked = updatesAndCounterEnabled,
-                                    onCheckedChange = {
-                                        updatesAndCounterEnabled = it
-                                        onUpdatesEnabledChange(it)
-                                    }
-                                )
-                            }
-                        }
-                    }
 
                     Spacer(modifier = Modifier.height(18.dp))
 
