@@ -51,8 +51,7 @@ fun TokenRefreshOverlay(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = onDismiss,
+                    ExpressiveIconButton(tooltipText = "Посмотреть кэш", onClick = onDismiss,
                         modifier = Modifier.size(36.dp)
                     ) {
                         Icon(

@@ -29,6 +29,7 @@ import ru.mesh.expressive.ui.components.ExpressivePullToRefreshBox
 import ru.mesh.expressive.ui.components.M3ConnectedButtonGroup
 import ru.mesh.expressive.ui.components.expressiveBounceClick
 import ru.mesh.expressive.ui.theme.*
+import ru.mesh.expressive.ui.components.ExpressiveIconButton
 import ru.mesh.expressive.ui.viewmodel.MeshMainViewModel
 
 @Composable
@@ -203,15 +204,13 @@ fun HomeworkScreen(viewModel: MeshMainViewModel) {
                             verticalAlignment = Alignment.Top
                         ) {
                             // Leading interactive Checkbox
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        viewModel.toggleHomework(hw.id)
-                                    },
-                                contentAlignment = Alignment.Center
+                            ExpressiveIconButton(
+                                tooltipText = if (hw.isDone) "Отметить невыполненным" else "Отметить выполненным",
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    viewModel.toggleHomework(hw.id)
+                                },
+                                modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     imageVector = if (hw.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,

@@ -1,5 +1,7 @@
 package ru.mesh.expressive.ui.screens
 
+import ru.mesh.expressive.ui.components.ExpressiveIconButton
+
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -720,7 +722,7 @@ fun GiftsScreen(viewModel: MeshMainViewModel) {
                                         },
                                         trailingIcon = {
                                             if (customPidText.isNotBlank()) {
-                                                IconButton(onClick = {
+                                                ExpressiveIconButton(tooltipText = "Очистить", onClick = {
                                                     customPidText = ""
                                                     selectedPersonPid = null
                                                 }) {
@@ -1007,8 +1009,7 @@ fun GiftsScreen(viewModel: MeshMainViewModel) {
 
                                         if (!leader.isCurrentUser && leader.gamificationId.isNotBlank()) {
                                             Spacer(modifier = Modifier.width(8.dp))
-                                            IconButton(
-                                                onClick = {
+                                            ExpressiveIconButton(tooltipText = "Подарить", onClick = {
                                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                     viewModel.openGiftSend(recipientGamifId = leader.gamificationId)
                                                 }

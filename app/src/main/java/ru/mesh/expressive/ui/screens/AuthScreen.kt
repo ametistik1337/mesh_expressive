@@ -1,5 +1,7 @@
 package ru.mesh.expressive.ui.screens
 
+import ru.mesh.expressive.ui.components.ExpressiveIconButton
+
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -65,7 +67,7 @@ fun AuthScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = {
+                        ExpressiveIconButton(tooltipText = "Назад", onClick = {
                             if (screenState != AuthScreenState.WELCOME_LANDING) {
                                 viewModel.resetOAuthState()
                                 screenState = AuthScreenState.WELCOME_LANDING
@@ -77,7 +79,7 @@ fun AuthScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showHowItWorksDialog = true }) {
+                        ExpressiveIconButton(tooltipText = "Инструкция", onClick = { showHowItWorksDialog = true }) {
                             Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = "Инструкция")
                         }
                     }

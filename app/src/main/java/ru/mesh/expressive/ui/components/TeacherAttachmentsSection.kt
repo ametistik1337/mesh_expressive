@@ -145,8 +145,7 @@ fun TeacherAttachmentsSection(
                         )
                     } else if (isDownloaded) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = {
+                            ExpressiveIconButton(tooltipText = "Скачать", onClick = {
                                     if (!fileMat.url.isNullOrBlank()) {
                                         viewModel.downloadAttachment(context, fileMat.url, fileMat.title, openAfterDownload = false)
                                     }

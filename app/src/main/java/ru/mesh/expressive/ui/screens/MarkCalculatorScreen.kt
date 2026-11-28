@@ -1,5 +1,7 @@
 package ru.mesh.expressive.ui.screens
 
+import ru.mesh.expressive.ui.components.ExpressiveIconButton
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -131,7 +133,7 @@ fun MarkCalculatorContent(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    ExpressiveIconButton(tooltipText = "Назад", onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Назад"
@@ -163,7 +165,7 @@ fun MarkCalculatorContent(
                 },
                 actions = {
                     if (hasChanges) {
-                        IconButton(onClick = resetAll) {
+                        ExpressiveIconButton(tooltipText = "Сбросить песочницу", onClick = resetAll) {
                             Icon(
                                 imageVector = Icons.Default.RestartAlt,
                                 contentDescription = "Сбросить песочницу",
@@ -171,7 +173,7 @@ fun MarkCalculatorContent(
                             )
                         }
                     }
-                    IconButton(onClick = { showLimitsDialog = true }) {
+                    ExpressiveIconButton(tooltipText = "Пороги округления", onClick = { showLimitsDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Tune,
                             contentDescription = "Пороги округления"

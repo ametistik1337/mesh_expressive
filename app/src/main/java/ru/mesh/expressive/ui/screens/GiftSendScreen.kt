@@ -1,5 +1,7 @@
 package ru.mesh.expressive.ui.screens
 
+import ru.mesh.expressive.ui.components.ExpressiveIconButton
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
@@ -165,7 +167,7 @@ fun GiftSendScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { viewModel.closeGiftSend() }) {
+                    ExpressiveIconButton(tooltipText = "Назад", onClick = { viewModel.closeGiftSend() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Назад"
@@ -552,7 +554,7 @@ fun GiftSendScreen(
                                 },
                                 trailingIcon = {
                                     if (recipientSearchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { recipientSearchQuery = "" }) {
+                                        ExpressiveIconButton(tooltipText = "Очистить", onClick = { recipientSearchQuery = "" }) {
                                             Icon(Icons.Default.Clear, contentDescription = "Очистить")
                                         }
                                     }
@@ -744,7 +746,7 @@ fun GiftSendScreen(
                                 },
                                 trailingIcon = {
                                     if (manualRecipientId.isNotEmpty()) {
-                                        IconButton(onClick = { manualRecipientId = "" }) {
+                                        ExpressiveIconButton(tooltipText = "Очистить", onClick = { manualRecipientId = "" }) {
                                             Icon(Icons.Default.Clear, contentDescription = "Очистить")
                                         }
                                     }

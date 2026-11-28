@@ -1,5 +1,7 @@
 package ru.mesh.expressive.ui.screens
 
+import ru.mesh.expressive.ui.components.ExpressiveIconButton
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -231,8 +233,7 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
                                 )
 
                                 Spacer(modifier = Modifier.width(4.dp))
-                                IconButton(
-                                    onClick = {
+                                ExpressiveIconButton(tooltipText = "Предыдущая неделя", onClick = {
                                         weekOffset--
                                         userManuallySelectedDay = true
                                         selectedDayIndex = 0
@@ -246,8 +247,7 @@ fun ScheduleScreen(viewModel: MeshMainViewModel) {
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                IconButton(
-                                    onClick = {
+                                ExpressiveIconButton(tooltipText = "Следующая неделя", onClick = {
                                         weekOffset++
                                         userManuallySelectedDay = true
                                         selectedDayIndex = 0

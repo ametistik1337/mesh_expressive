@@ -1,5 +1,7 @@
 package ru.mesh.expressive.ui.screens
 
+import ru.mesh.expressive.ui.components.ExpressiveIconButton
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -266,8 +268,7 @@ fun MarksScreen(viewModel: MeshMainViewModel) {
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
-                                        IconButton(
-                                            onClick = { showGpaInfoDialog = true },
+                                        ExpressiveIconButton(tooltipText = "Информация об обновлении балла", onClick = { showGpaInfoDialog = true },
                                             modifier = Modifier.size(32.dp)
                                         ) {
                                             Icon(
@@ -540,8 +541,7 @@ fun FixableMarksGroupCard(
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
-                    IconButton(
-                        onClick = { isExpanded = !isExpanded },
+                    ExpressiveIconButton(tooltipText = if (isExpanded) "Свернуть подробности" else "Развернуть подробности", onClick = { isExpanded = !isExpanded },
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(

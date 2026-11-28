@@ -393,7 +393,8 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
                                 Text(if (isUploadingWorkPhoto) "Загрузка..." else "Прикрепить фото")
                             }
 
-                            FilledTonalIconButton(
+                            ExpressiveIconButton(
+                                tooltipText = "Сделать фото",
                                 onClick = {
                                     val tempFile = java.io.File(
                                         context.cacheDir,
@@ -409,6 +410,8 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
                                     cameraLauncher.launch(uri)
                                 },
                                 enabled = !isUploadingWorkPhoto,
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
@@ -418,7 +421,8 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
                                 )
                             }
 
-                            OutlinedIconButton(
+                            ExpressiveIconButton(
+                                tooltipText = "Ломанный файл",
                                 onClick = {
                                     val lessonId = lesson.id.toLongOrNull()
                                     if (lessonId != null) {
@@ -433,9 +437,7 @@ fun LessonDetailBottomSheet(viewModel: MeshMainViewModel) {
                                     1.dp,
                                     MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
                                 ),
-                                colors = IconButtonDefaults.outlinedIconButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error
-                                )
+                                contentColor = MaterialTheme.colorScheme.error
                             ) {
                                 Icon(
                                     Icons.Default.BrokenImage,

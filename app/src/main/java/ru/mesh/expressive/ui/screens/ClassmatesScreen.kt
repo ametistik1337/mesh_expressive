@@ -1,5 +1,7 @@
 package ru.mesh.expressive.ui.screens
 
+import ru.mesh.expressive.ui.components.ExpressiveIconButton
+
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -225,7 +227,7 @@ fun ClassmatesScreen(viewModel: MeshMainViewModel) {
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
+                            ExpressiveIconButton(tooltipText = "Очистить", onClick = { searchQuery = "" }) {
                                 Icon(Icons.Default.Close, contentDescription = "Очистить")
                             }
                         }
@@ -416,8 +418,7 @@ fun ClassmateDetailBottomSheet(
                     }
 
                     if (classmate.contingentGuid.isNotBlank()) {
-                        IconButton(
-                            onClick = {
+                        ExpressiveIconButton(tooltipText = "Копировать Person ID", onClick = {
                                 clipboardManager.setText(AnnotatedString(classmate.contingentGuid))
                                 Toast.makeText(context, "Person ID скопирован", Toast.LENGTH_SHORT).show()
                             }
@@ -463,8 +464,7 @@ fun ClassmateDetailBottomSheet(
                     }
 
                     if (classmate.gamificationId.isNotBlank()) {
-                        IconButton(
-                            onClick = {
+                        ExpressiveIconButton(tooltipText = "Копировать Gamification ID", onClick = {
                                 clipboardManager.setText(AnnotatedString(classmate.gamificationId))
                                 Toast.makeText(context, "Gamification ID скопирован", Toast.LENGTH_SHORT).show()
                             }
@@ -509,8 +509,7 @@ fun ClassmateDetailBottomSheet(
                             )
                         }
 
-                        IconButton(
-                            onClick = {
+                        ExpressiveIconButton(tooltipText = "Копировать Profile ID", onClick = {
                                 clipboardManager.setText(AnnotatedString("${classmate.profileId}"))
                                 Toast.makeText(context, "Profile ID скопирован", Toast.LENGTH_SHORT).show()
                             }
